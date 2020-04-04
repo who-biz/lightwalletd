@@ -30,7 +30,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/zcash/lightwalletd/walletrpc"
+	pb "github.com/asherda/lightwalletd/walletrpc"
 	"google.golang.org/grpc"
 )
 

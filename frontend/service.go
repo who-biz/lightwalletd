@@ -16,8 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zcash/lightwalletd/common"
-	"github.com/zcash/lightwalletd/walletrpc"
+	"github.com/asherda/lightwalletd/common"
+	"github.com/asherda/lightwalletd/walletrpc"
 )
 
 var (

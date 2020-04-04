@@ -7,8 +7,8 @@ import (
 	"bytes"
 	"sync"
 
+	"github.com/asherda/lightwalletd/walletrpc"
 	"github.com/golang/protobuf/proto"
-	"github.com/zcash/lightwalletd/walletrpc"
 )
 
 type blockCacheEntry struct {
