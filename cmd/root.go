@@ -210,7 +210,7 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is current directory, lightwalletd.yaml)")
-	rootCmd.Flags().String("bind-addr", "127.0.0.1:9067", "the address to listen on")
+	rootCmd.Flags().String("bind-addr", "127.0.0.1:9077", "the address to listen on")
 	rootCmd.Flags().String("tls-cert", "./cert.pem", "the path to a TLS certificate")
 	rootCmd.Flags().String("tls-key", "./cert.key", "the path to a TLS key file")
 	rootCmd.Flags().Int("log-level", int(logrus.InfoLevel), "log level (logrus 1-7)")
