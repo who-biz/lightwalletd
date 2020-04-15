@@ -23,7 +23,8 @@ var BuildDate = ""
 var BuildUser = ""
 
 type Options struct {
-	BindAddr          string `json:"bind_address,omitempty"`
+	GRPCBindAddr      string `json:"grpc_bind_address,omitempty"`
+	HTTPBindAddr      string `json:"http_bind_address,omitempty"`
 	TLSCertPath       string `json:"tls_cert_path,omitempty"`
 	TLSKeyPath        string `json:"tls_cert_key,omitempty"`
 	LogLevel          uint64 `json:"log_level,omitempty"`
@@ -80,8 +81,12 @@ func GetSaplingInfo() (int, int, string, string) {
 	chainName := f.(map[string]interface{})["chain"].(string)
 
 	upgradeJSON := f.(map[string]interface{})["upgrades"]
-	saplingJSON := upgradeJSON.(map[string]interface{})["76b809bb"] // Sapling ID
-	saplingHeight := saplingJSON.(map[string]interface{})["activationheight"].(float64)
+
+	// If the sapling consensus branch doesn't exist, it must be regtest
+	saplingHeight := float64(0)
+	if saplingJSON, ok := upgradeJSON.(map[string]interface{})["76b809bb"]; ok { // Sapling ID
+		saplingHeight = saplingJSON.(map[string]interface{})["activationheight"].(float64)
+	}
 
 	blockHeight := f.(map[string]interface{})["headers"].(float64)
 
