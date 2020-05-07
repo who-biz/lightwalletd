@@ -257,7 +257,7 @@ func (c *BlockCache) Add(height int, block *walletrpc.CompactBlock) error {
 	}
 	if height < c.firstBlock {
 		// Should never try to add a block before Sapling activation height
-		Log.Fatal("cache.Add height below Sapling: ", height)
+		Log.Fatal("cache.Add height below block 1: ", height)
 		return nil
 	}
 	if height < c.nextBlock {
@@ -269,7 +269,7 @@ func (c *BlockCache) Add(height int, block *walletrpc.CompactBlock) error {
 
 	// TODO COINBASE-HEIGHT: restore this check after coinbase height is fixed
 	if false && bheight != height {
-		// This could only happen if zcashd returned the wrong
+		// This could only happen if verusd returned the wrong
 		// block (not the height we requested).
 		Log.Fatal("cache.Add wrong height: ", bheight, " expecting: ", height)
 		return nil
