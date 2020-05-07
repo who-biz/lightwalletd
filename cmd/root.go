@@ -45,6 +45,7 @@ var rootCmd = &cobra.Command{
 			LogLevel:          viper.GetUint64("log-level"),
 			LogFile:           viper.GetString("log-file"),
 			ZcashConfPath:     viper.GetString("zcash-conf-path"),
+			VerusdConfPath:    viper.GetString("verusd-conf-path"),
 			NoTLSVeryInsecure: viper.GetBool("no-tls-very-insecure"),
 			DataDir:           viper.GetString("data-dir"),
 			Redownload:        viper.GetBool("redownload"),
@@ -62,7 +63,7 @@ var rootCmd = &cobra.Command{
 			os.OpenFile(opts.LogFile, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
 		}
 		if !opts.Darkside {
-			filesThatShouldExist = append(filesThatShouldExist, opts.ZcashConfPath)
+			filesThatShouldExist = append(filesThatShouldExist, opts.VerusdConfPath)
 		}
 
 		for _, filename := range filesThatShouldExist {
@@ -165,11 +166,11 @@ func startServer(opts *common.Options) error {
 	if opts.Darkside {
 		common.RawRequest = common.DarkSideRawRequest
 	} else {
-		rpcClient, err := frontend.NewZRPCFromConf(opts.ZcashConfPath)
+		rpcClient, err := frontend.NewVRPCFromConf(opts.VerusdConfPath)
 		if err != nil {
 			common.Log.WithFields(logrus.Fields{
 				"error": err,
-			}).Fatal("setting up RPC connection to zcashd")
+			}).Fatal("setting up RPC connection to verusd")
 		}
 		// Indirect function for test mocking (so unit tests can talk to stub functions).
 		common.RawRequest = rpcClient.RawRequest
@@ -265,7 +266,8 @@ func init() {
 	rootCmd.Flags().String("tls-key", "./cert.key", "the path to a TLS key file")
 	rootCmd.Flags().Int("log-level", int(logrus.InfoLevel), "log level (logrus 1-7)")
 	rootCmd.Flags().String("log-file", "./server.log", "log file to write to")
-	rootCmd.Flags().String("zcash-conf-path", "./zcash.conf", "conf file to pull RPC creds from")
+	rootCmd.Flags().String("verusd-conf-path", "./verusd.conf", "conf file to pull VRSC RPC creds from")
+	rootCmd.Flags().String("zcash-conf-path", "./zcash.conf", "conf file to pull ZCash RPC creds from, not supported as we switch to VRSC")
 	rootCmd.Flags().Bool("no-tls-very-insecure", false, "run without the required TLS certificate, only for debugging, DO NOT use in production")
 	rootCmd.Flags().Bool("redownload", false, "re-fetch all blocks from zcashd; reinitialize local cache files")
 	rootCmd.Flags().String("data-dir", "/var/lib/lightwalletd", "data directory (such as db)")
@@ -283,6 +285,8 @@ func init() {
 	viper.SetDefault("log-level", int(logrus.InfoLevel))
 	viper.BindPFlag("log-file", rootCmd.Flags().Lookup("log-file"))
 	viper.SetDefault("log-file", "./server.log")
+	viper.BindPFlag("verusd-conf-path", rootCmd.Flags().Lookup("verusd-conf-path"))
+	viper.SetDefault("verusd-conf-path", "./VRSC.conf")
 	viper.BindPFlag("zcash-conf-path", rootCmd.Flags().Lookup("zcash-conf-path"))
 	viper.SetDefault("zcash-conf-path", "./zcash.conf")
 	viper.BindPFlag("no-tls-very-insecure", rootCmd.Flags().Lookup("no-tls-very-insecure"))

@@ -11,7 +11,7 @@ import (
 	ini "gopkg.in/ini.v1"
 )
 
-func NewZRPCFromConf(confPath interface{}) (*rpcclient.Client, error) {
+func NewVRPCFromConf(confPath interface{}) (*rpcclient.Client, error) {
 	connCfg, err := connFromConf(confPath)
 	if err != nil {
 		return nil, err
@@ -33,7 +33,7 @@ func connFromConf(confPath interface{}) (*rpcclient.ConnConfig, error) {
 	}
 	rpcport := cfg.Section("").Key("rpcport").String()
 	if rpcport == "" {
-		rpcport = "8232" // default mainnet
+		rpcport = "27486" // default mainnet
 		testnet, _ := cfg.Section("").Key("testnet").Int()
 		regtest, _ := cfg.Section("").Key("regtest").Int()
 		if testnet > 0 || regtest > 0 {
@@ -43,13 +43,13 @@ func connFromConf(confPath interface{}) (*rpcclient.ConnConfig, error) {
 	username := cfg.Section("").Key("rpcuser").String()
 	password := cfg.Section("").Key("rpcpassword").String()
 
-	// Connect to local Zcash RPC server using HTTP POST mode.
+	// Connect to local verusd RPC server using HTTP POST mode.
 	connCfg := &rpcclient.ConnConfig{
 		Host:         net.JoinHostPort(rpcaddr, rpcport),
 		User:         username,
 		Pass:         password,
-		HTTPPostMode: true, // Zcash only supports HTTP POST mode
-		DisableTLS:   true, // Zcash does not provide TLS by default
+		HTTPPostMode: true, // verusd only supports HTTP POST mode
+		DisableTLS:   true, // verusd does not provide TLS by default - wait, what?
 	}
 	// Notice the notification parameter is nil since notifications are
 	// not supported in HTTP POST mode.
