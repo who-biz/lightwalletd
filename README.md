@@ -66,7 +66,7 @@ your `$GOPATH` (`$HOME/go` by default), then build the lightwalletd server binar
 Assuming you used `make` to build the server, here's a typical developer invocation:
 
 ```
-"--log-file", "/logs/server.log", "--grpc-bind-addr", "127.0.0.1:18232", "--no-tls-very-insecure", "--verusd-conf-path", "/home/virtualsoundnw/.komodo/VRSC/VRSC.conf", "--data-dir", "."
+./lightwalletd --log-file /logs/server.log --grpc-bind-addr 127.0.0.1:18232 --verusd-conf-path /home/virtualsoundnw/.komodo/VRSC/VRSC.conf --data-dir .
 ```
 Type `./lightwalletd help` to see the full list of options and arguments.
 
@@ -105,7 +105,7 @@ certbot certonly --standalone --preferred-challenges http -d some.forward.dns.co
 Example using server binary built from Makefile:
 
 ```
-./lightwalletd --tls-cert cert.pem --tls-key key.pem --conf-file /home/zcash/.zcash/zcash.conf --log-file /logs/server.log
+./lightwalletd --tls-cert cert.pem --tls-key key.pem --verus-conf-file /home/virtualsoundnw/.komodo/VRSC.conf --log-file /logs/server.log --grpc-bind-addr 127.0.0.1:18232
 ```
 
 ## Block cache
