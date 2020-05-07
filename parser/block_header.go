@@ -5,11 +5,12 @@ package parser
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/binary"
 	"math/big"
+	"unsafe"
 
 	"github.com/asherda/lightwalletd/parser/internal/bytestring"
+	"github.com/asherda/lightwalletd/parser/verushash"
 	"github.com/pkg/errors"
 )
 
@@ -63,6 +64,9 @@ type BlockHeader struct {
 	cachedHash      []byte
 	targetThreshold *big.Int
 }
+
+// VerusHash holds the VerusHash object used for the VerusCoin hashing methods
+var VerusHash = verushash.NewVerushash()
 
 // CompactLengthPrefixedLen calculates the total number of bytes needed to
 // encode 'length' bytes.
@@ -127,14 +131,14 @@ func NewBlockHeader() *BlockHeader {
 func BlockHeaderFromParts(version int32, prevhash []byte, merkleroot []byte, saplingroot []byte, time uint32, nbitsbytes []byte, nonce []byte, solution []byte) *BlockHeader {
 	return &BlockHeader{
 		rawBlockHeader: &rawBlockHeader{
-			Version: version,
-			HashPrevBlock: prevhash,
-			HashMerkleRoot: merkleroot,
+			Version:              version,
+			HashPrevBlock:        prevhash,
+			HashMerkleRoot:       merkleroot,
 			HashFinalSaplingRoot: saplingroot,
-			Time: time,
-			NBitsBytes: nbitsbytes,
-			Nonce: nonce,
-			Solution: solution,
+			Time:                 time,
+			NBitsBytes:           nbitsbytes,
+			Nonce:                nonce,
+			Solution:             solution,
 		},
 	}
 }
@@ -205,7 +209,7 @@ func parseNBits(b []byte) *big.Int {
 }
 
 // GetDisplayHash returns the bytes of a block hash in big-endian order.
-func (hdr *BlockHeader) GetDisplayHash() []byte {
+func (hdr *BlockHeader) GetDisplayHash(height int) []byte {
 	if hdr.cachedHash != nil {
 		return hdr.cachedHash
 	}
@@ -215,35 +219,31 @@ func (hdr *BlockHeader) GetDisplayHash() []byte {
 		return nil
 	}
 
-	// SHA256d
-	digest := sha256.Sum256(serializedHeader)
-	digest = sha256.Sum256(digest[:])
+	// VerusHash
+	hash := make([]byte, 32)
+	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
+	VerusHash.Anyverushash_reverse_height(string(serializedHeader), len(string(serializedHeader)), ptrHash, height)
 
-	// Reverse byte order
-	for i := 0; i < len(digest)/2; i++ {
-		j := len(digest) - 1 - i
-		digest[i], digest[j] = digest[j], digest[i]
-	}
-
-	hdr.cachedHash = digest[:]
+	hdr.cachedHash = hash
 	return hdr.cachedHash
 }
 
 // GetEncodableHash returns the bytes of a block hash in little-endian wire order.
-func (hdr *BlockHeader) GetEncodableHash() []byte {
+func (hdr *BlockHeader) GetEncodableHash(height int) []byte {
 	serializedHeader, err := hdr.MarshalBinary()
 
 	if err != nil {
 		return nil
 	}
 
-	// SHA256d
-	digest := sha256.Sum256(serializedHeader)
-	digest = sha256.Sum256(digest[:])
+	hash := make([]byte, 32)
+	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
+	VerusHash.Anyverushash_height(string(serializedHeader), len(string(serializedHeader)), ptrHash, height)
 
-	return digest[:]
+	return hash
 }
 
+// GetDisplayPrevHash gets the previous block's hash from this blocks header
 func (hdr *BlockHeader) GetDisplayPrevHash() []byte {
 	rhash := make([]byte, len(hdr.HashPrevBlock))
 	copy(rhash, hdr.HashPrevBlock)

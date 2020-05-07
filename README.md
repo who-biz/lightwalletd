@@ -42,7 +42,7 @@ rpcuser=xxxxx
 rpcpassword=xxxxx
 ```
 
-The `verusd` can be configured to run `mainnet` or `testnet` (or `regtest`). If you stop `verusd` and restart it on a different network (switch from `testnet` to `mainnet`, for example), you must also stop and restart lightwalletd.
+verusd can be configured to run `mainnet` or `testnet` (or `regtest`). If you stop `verusd` and restart it on a different network (switch from `testnet` to `mainnet`, for example), you must also stop and restart lightwalletd.
 
 It's necessary to run `verusd --reindex` one time for these options to take effect. This typically takes several hours, and requires more space in the `.komodo` data directory.
 
@@ -53,7 +53,7 @@ Lightwalletd uses the following `verusd` RPCs:
 - `getaddresstxids`
 - `sendrawtransaction`
 
-We pan on extending it to include identity and token options now that those are available (identity) or becoming available (tokens in may 2020).
+We plan on extending it to include identity and token options now that those are available (identity) or becoming available (tokens in may 2020).
 ## Lightwalletd
 
 First, install [Go](https://golang.org/dl/#stable) version 1.11 or later. You can see your current version by running `go version`.
@@ -66,7 +66,7 @@ your `$GOPATH` (`$HOME/go` by default), then build the lightwalletd server binar
 Assuming you used `make` to build the server, here's a typical developer invocation:
 
 ```
-"--log-file", "/logs/server.log", "--grpc-bind-addr", "127.0.0.1:18232", "--no-tls-very-insecure", "--verusd-conf-path", "/home/virtualsoundnw/.komodo/VRSC/VRSC.conf", "--data-dir", "~"
+"--log-file", "/logs/server.log", "--grpc-bind-addr", "127.0.0.1:18232", "--no-tls-very-insecure", "--verusd-conf-path", "/home/virtualsoundnw/.komodo/VRSC/VRSC.conf", "--data-dir", "."
 ```
 Type `./lightwalletd help` to see the full list of options and arguments.
 
