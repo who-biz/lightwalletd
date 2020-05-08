@@ -194,7 +194,7 @@ func startServer(opts *common.Options) error {
 		os.Stderr.WriteString(fmt.Sprintf("\n  ** Can't create db directory: %s\n\n", dbPath))
 		os.Exit(1)
 	}
-	cache := common.NewBlockCache(dbPath, chainName, saplingHeight, opts.Redownload)
+	cache := common.NewBlockCache(dbPath, chainName, 1, opts.Redownload)
 	go common.BlockIngestor(cache, 0 /*loop forever*/)
 
 	// Compact transaction service initialization

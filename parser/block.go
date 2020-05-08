@@ -36,20 +36,22 @@ func (b *Block) Transactions() []*Transaction {
 
 // GetDisplayHash returns the block hash in big-endian display order.
 func (b *Block) GetDisplayHash() []byte {
-	return b.hdr.GetDisplayHash()
+	return b.hdr.GetDisplayHash(b.height)
 }
 
 // TODO: encode hash endianness in a type?
 
 // GetEncodableHash returns the block hash in little-endian wire order.
-func (b *Block) GetEncodableHash() []byte {
-	return b.hdr.GetEncodableHash()
+func (b *Block) GetEncodableHash(height int) []byte {
+	return b.hdr.GetEncodableHash(height)
 }
 
+// GetDisplayPrevHash returns the prevHash field from b *Block
 func (b *Block) GetDisplayPrevHash() []byte {
 	return b.hdr.GetDisplayPrevHash()
 }
 
+// HasSaplingTransactions returns true if b *Block has Sapling TXs
 func (b *Block) HasSaplingTransactions() bool {
 	for _, tx := range b.vtx {
 		if tx.HasSaplingElements() {
@@ -62,8 +64,7 @@ func (b *Block) HasSaplingTransactions() bool {
 // see https://github.com/zcash/lightwalletd/issues/17#issuecomment-467110828
 const genesisTargetDifficulty = 520617983
 
-// GetHeight() extracts the block height from the coinbase transaction. See
-// BIP34. Returns block height on success, or -1 on error.
+// GetHeight extracts the block height from the coinbase transaction. See BIP34. Returns block height on success, or -1 on error.
 func (b *Block) GetHeight() int {
 	if b.height != -1 {
 		return b.height
@@ -90,16 +91,18 @@ func (b *Block) GetHeight() int {
 	return int(blockHeight)
 }
 
+// GetPrevHash returns the prevHash from the header
 func (b *Block) GetPrevHash() []byte {
 	return b.hdr.HashPrevBlock
 }
 
+// ToCompact returns b *Block as a CompactBlock
 func (b *Block) ToCompact() *walletrpc.CompactBlock {
 	compactBlock := &walletrpc.CompactBlock{
 		//TODO ProtoVersion: 1,
 		Height:   uint64(b.GetHeight()),
 		PrevHash: b.hdr.HashPrevBlock,
-		Hash:     b.GetEncodableHash(),
+		Hash:     b.GetEncodableHash(b.height),
 		Time:     b.hdr.Time,
 	}
 
@@ -107,13 +110,14 @@ func (b *Block) ToCompact() *walletrpc.CompactBlock {
 	saplingTxns := make([]*walletrpc.CompactTx, 0, len(b.vtx))
 	for idx, tx := range b.vtx {
 		if tx.HasSaplingElements() {
-			saplingTxns = append(saplingTxns, tx.ToCompact(idx))
+			saplingTxns = append(saplingTxns, tx.ToCompact(idx, b.height))
 		}
 	}
 	compactBlock.Vtx = saplingTxns
 	return compactBlock
 }
 
+// ParseFromSlice extracts the block header
 func (b *Block) ParseFromSlice(data []byte) (rest []byte, err error) {
 	hdr := NewBlockHeader()
 	data, err = hdr.ParseFromSlice(data)
