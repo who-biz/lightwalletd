@@ -8,3 +8,5 @@ lwd-api.html
 *.orig
 __debug_bin
 .vscode
+CMakeCache.txt
+parser/verushahs/Makefile
