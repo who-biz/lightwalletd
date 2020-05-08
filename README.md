@@ -1,7 +1,3 @@
-
-[![pipeline status](https://gitlab.com/zcash/lightwalletd/badges/master/pipeline.svg)](https://gitlab.com/zcash/lightwalletd/commits/master)
-[![coverage report](https://gitlab.com/zcash/lightwalletd/badges/master/coverage.svg)](https://gitlab.com/zcash/lightwalletd/commits/master)
-
 # Disclaimer
 This is an alpha build and is currently under active development. Please be advised of the following:
 
@@ -12,7 +8,7 @@ This is an alpha build and is currently under active development. Please be advi
 The current version always reloads the data each time it starts. Data is loaded starting with block 1. until the most recent block is reached. After that new blocks are added as we get them, until the next restart, then it reloads etc.
 🔒 Security Warnings
 
-The Lightwalletd Server is experimental and a work in progress. Use it at your own risk.
+The Lightwalletd server is experimental software. Use it at your own risk.
 
 ---
 
@@ -33,7 +29,7 @@ Documentation for lightwalletd clients (the gRPC interface) is in `docs/rtd/inde
 
 ## Zcashd
 
-You must start a local instance of `verusd`, and its `.komodo/VRSC.conf` file must include the following entries
+You must start a local instance of `verusd`, and its `VRSC.conf` file must include the following entries
 (set the user and password strings accordingly):
 ```
 txindex=1
@@ -45,7 +41,7 @@ rpcpassword=xxxxx
 
 verusd can be configured to run `mainnet` or `testnet` (or `regtest`). If you stop `verusd` and restart it on a different network (switch from `testnet` to `mainnet`, for example), you must also stop and restart lightwalletd.
 
-It's necessary to run `verusd --reindex` one time for these options to take effect. This typically takes several hours, and requires more space in the `.komodo` data directory.
+It's necessary to run `verusd --reindex` one time for these options to take effect. This typically takes several hours, and requires more space in the data directory.
 
 Lightwalletd uses the following `verusd` RPCs:
 - `getblockchaininfo`
@@ -56,8 +52,9 @@ Lightwalletd uses the following `verusd` RPCs:
 
 We plan on extending it to include identity and token options now that those are available (identity) or becoming available (tokens in may 2020).
 ## Lightwalletd
+install [Boost](https://www.boost.org/)
 
-First, install [Go](https://golang.org/dl/#stable) version 1.11 or later. You can see your current version by running `go version`.
+install [Go](https://golang.org/dl/#stable) version 1.11 or later. You can see your current version by running `go version`.
 
 Clone the [current repository](https://github.com/zcash/lightwalletd) into a local directory that is _not_ within any component of
 your `$GOPATH` (`$HOME/go` by default), then build the lightwalletd server binary by running `make`.
@@ -67,7 +64,7 @@ your `$GOPATH` (`$HOME/go` by default), then build the lightwalletd server binar
 Assuming you used `make` to build the server, here's a typical developer invocation:
 
 ```
-./lightwalletd --log-file /logs/server.log --grpc-bind-addr 127.0.0.1:18232 --verusd-conf-path /home/virtualsoundnw/.komodo/VRSC/VRSC.conf --data-dir .
+./lightwalletd --log-file /logs/server.log --grpc-bind-addr 127.0.0.1:18232 --verusd-conf-path VRSC.conf --data-dir .
 ```
 Type `./lightwalletd help` to see the full list of options and arguments.
 
@@ -106,7 +103,7 @@ certbot certonly --standalone --preferred-challenges http -d some.forward.dns.co
 Example using server binary built from Makefile:
 
 ```
-./lightwalletd --tls-cert cert.pem --tls-key key.pem --verus-conf-file /home/virtualsoundnw/.komodo/VRSC.conf --log-file /logs/server.log --grpc-bind-addr 127.0.0.1:18232
+./lightwalletd --tls-cert cert.pem --tls-key key.pem --verus-conf-file VRSC.conf --log-file /logs/server.log --grpc-bind-addr 127.0.0.1:18232
 ```
 
 ## Block cache

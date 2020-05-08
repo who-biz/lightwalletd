@@ -1,4 +1,4 @@
-# Install script for directory: /home/virtualsoundnw/lightwalletd/parser/verushash
+# Install script for directory: /home/asher/go/src/hash/lightwalletd/parser/verushash
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -45,5 +45,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/virtualsoundnw/lightwalletd/parser/verushash/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/asher/go/src/hash/lightwalletd/parser/verushash/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

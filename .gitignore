@@ -9,4 +9,10 @@ lwd-api.html
 __debug_bin
 .vscode
 CMakeCache.txt
-parser/verushash/Makefile
+Makefile
+
+*.cmake
+*.log
+*.a
+parser/verushash/CMakeFiles
+CMakeCache.txt
