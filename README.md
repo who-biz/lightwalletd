@@ -52,9 +52,11 @@ Lightwalletd uses the following `verusd` RPCs:
 
 We plan on extending it to include identity and token options now that those are available (identity) or becoming available (tokens in may 2020).
 ## Lightwalletd
-install [Boost](https://www.boost.org/)
+Install [Cmake](https://cmake.org/download/)
 
-install [Go](https://golang.org/dl/#stable) version 1.11 or later. You can see your current version by running `go version`.
+Install [Boost](https://www.boost.org/)
+
+Install [Go](https://golang.org/dl/#stable) version 1.11 or later. You can see your current version by running `go version`.
 
 Clone the [current repository](https://github.com/zcash/lightwalletd) into a local directory that is _not_ within any component of
 your `$GOPATH` (`$HOME/go` by default), then build the lightwalletd server binary by running `make`.
