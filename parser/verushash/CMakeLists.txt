@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(verushash)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -D_GLIBCXX_USE_C99 -D_GLIBCXX_USE_C99_MATH") # -Wall
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11") # -Wall
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_library(verushash STATIC
         src/haraka.c
@@ -13,34 +13,21 @@ add_library(verushash STATIC
         src/verus_clhash_portable.cpp
         )
 
-########
-# LINUX
-if(CMAKE_COMPILER_IS_GNUCXX)
-    # use native cpu features
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=x86-64 -mpclmul -msse2 -msse3 -mssse3 -msse4 -msse4.1 -msse4.2 -maes -g -fomit-frame-pointer -fPIC")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=x86-64 -mpclmul -msse2 -msse3 -mssse3 -msse4 -msse4.1 -msse4.2 -maes -g -fomit-frame-pointer -fPIC")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=x86-64 -fPIC")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=x86-64  -fPIC")
 
     # optimizations
     add_definitions(-O2)
 
-endif()
 
 # MACOS
 if(APPLE)
-    if(CMAKE_COMPILER_IS_GNUCXX)
-        # use native cpu features
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m64 -mpclmul -msse2 -msse3 -mssse3 -msse4 -msse4.1 -msse4.2 -maes -g -fomit-frame-pointer -fPIC" )
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64 -mpclmul -msse2 -msse3 -mssse3 -msse4 -msse4.1 -msse4.2 -maes -g -fomit-frame-pointer -fPIC")
-        include_directories(${CMAKE_CURRENT_SOURCE_DIR}/compat)
-        # optimizations
-        add_definitions(-O2)
-    endif()
+   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/compat)
 endif(APPLE)
 
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/verus_clhash_portable.cpp PROPERTIES COMPILE_FLAGS "-mno-sse4 -mno-sse4.1 -mno-sse4.2 -g")
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/haraka_portable.c PROPERTIES COMPILE_FLAGS "-mno-sse4 -mno-sse4.1 -mno-sse4.2 -g")
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/verus_clhash.cpp PROPERTIES COMPILE_FLAGS "-mavx -g")
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/haraka.c PROPERTIES COMPILE_FLAGS "-mavx -g")
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/verus_hash.cpp PROPERTIES COMPILE_FLAGS "-m64 -mpclmul -msse2 -msse3 -mssse3 -msse4 -msse4.1 -msse4.2 -maes -g -fomit-frame-pointer")
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/verus_clhash.cpp PROPERTIES COMPILE_FLAGS "-m64 -mpclmul -msse2 -msse3 -mssse3 -msse4 -msse4.1 -msse4.2 -maes -g -fomit-frame-pointer")
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/haraka.c PROPERTIES COMPILE_FLAGS "-m64 -mpclmul -msse2 -msse3 -mssse3 -msse4 -msse4.1 -msse4.2 -maes -g -fomit-frame-pointer")
 
 # Common
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -62,7 +49,7 @@ if (Boost_FOUND)
     # such as the compiler skipping warnings [...])."
     include_directories (SYSTEM ${Boost_INCLUDE_DIR})
 
-    # From the offical documentation:
+    # From the official documentation:
     # "Specify directories in which the linker will look for libraries. [...] Note
     # that this command is rarely necessary. Library locations returned by
     # find_package() and find_library() are absolute paths. Pass these absolute
