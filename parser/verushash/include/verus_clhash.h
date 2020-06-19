@@ -102,7 +102,7 @@ inline bool IsCPUVerusOptimized()
         __cpuverusoptimized = true;
     else
         __cpuverusoptimized = false;
-
+        
     #else
     if (__cpuverusoptimized & 0x80)
     {

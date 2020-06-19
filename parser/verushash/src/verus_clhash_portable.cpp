@@ -27,13 +27,13 @@
 #include <sys/types.h>
 #endif// APPLE
 
-#ifdef __linux__
+#ifdef __linux__ 
 
 #if defined(__i386__) || defined(__X86_64__)
 #include <x86intrin.h>
 #elif defined(__arm__) || defined(__aarch64__)
 #include "crypto/SSE2NEON.h"
-#endif
+#endif 
 
 #elif _WIN32
 #pragma warning (disable : 4146)
@@ -59,7 +59,7 @@ void clmul64(uint64_t a, uint64_t b, uint64_t* r)
     r[0] = u[a & smask]; //first window only affects lower word
     r[1] = 0;
     for(i = s ; i < 64 ; i += s){
-        tmp = u[a >> i & smask];
+        tmp = u[a >> i & smask];     
         r[0] ^= tmp << i;
         r[1] ^= tmp >> (64 - i);
     }
@@ -90,7 +90,7 @@ u128 _mm_clmulepi64_si128_emu(const __m128i &a, const __m128i &b, int imm)
     }
     else
     {
-        printf("_mm_clmulepi64_si128_emu: Portable version failed! a: %lxh %lxl, b: %lxh %lxl, imm: %x, emu: %lxh %lxl, intrin: %lxh %lxl\n",
+        printf("_mm_clmulepi64_si128_emu: Portable version failed! a: %lxh %lxl, b: %lxh %lxl, imm: %x, emu: %lxh %lxl, intrin: %lxh %lxl\n", 
                *((uint64_t *)&a + 1), *(uint64_t *)&a,
                *((uint64_t *)&b + 1), *(uint64_t *)&b,
                imm,
@@ -120,7 +120,7 @@ u128 _mm_mulhrs_epi16_emu(__m128i _a, __m128i _b)
     }
     else
     {
-        printf("_mm_mulhrs_epi16_emu: Portable version failed! a: %lxh %lxl, b: %lxh %lxl, emu: %lxh %lxl, intrin: %lxh %lxl\n",
+        printf("_mm_mulhrs_epi16_emu: Portable version failed! a: %lxh %lxl, b: %lxh %lxl, emu: %lxh %lxl, intrin: %lxh %lxl\n", 
                *((uint64_t *)&a + 1), *(uint64_t *)&a,
                *((uint64_t *)&b + 1), *(uint64_t *)&b,
                *((uint64_t *)result + 1), *(uint64_t *)result,
@@ -239,7 +239,7 @@ inline __m128i _mm_srli_si128_emu(__m128i a, int imm8)
     }
     else
     {
-        printf("_mm_srli_si128_emu: Portable version failed! val: %lx%lx imm: %x emu: %lx%lx, intrin: %lx%lx\n",
+        printf("_mm_srli_si128_emu: Portable version failed! val: %lx%lx imm: %x emu: %lx%lx, intrin: %lx%lx\n", 
                *((uint64_t *)&a + 1), *(uint64_t *)&a,
                imm8,
                *((uint64_t *)result + 1), *(uint64_t *)result,
@@ -595,8 +595,8 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_port(__m128i *randomsource, 
 // verus intermediate hash extra
 __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_1_port(__m128i *randomsource, const __m128i buf[4], uint64_t keyMask, __m128i **pMoveScratch)
 {
-    const __m128i pbuf_copy[4] = {_mm_xor_si128(buf[0],buf[2]), _mm_xor_si128(buf[1],buf[3]), buf[2], buf[3]};
-    const  __m128i *pbuf;
+    const __m128i pbuf_copy[4] = {_mm_xor_si128(buf[0],buf[2]), _mm_xor_si128(buf[1],buf[3]), buf[2], buf[3]}; 
+    const  __m128i *pbuf; 
 
     // divide key mask by 16 from bytes to __m128i
     keyMask >>= 4;
@@ -816,7 +816,6 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_1_port(__m128i *randomso
             case 0x18:
             {
                 const __m128i *buftmp = pbuf - (((selector & 1) << 1) - 1);
-                __m128i tmp; // used by MIX2
 
                 uint64_t rounds = selector >> 61; // loop randomly between 1 and 8 times
                 __m128i *rc = prand;
@@ -881,8 +880,8 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_1_port(__m128i *randomso
 // verus intermediate hash extra
 __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_2_port(__m128i *randomsource, const __m128i buf[4], uint64_t keyMask, __m128i **pMoveScratch)
 {
-    const __m128i pbuf_copy[4] = {_mm_xor_si128(buf[0],buf[2]), _mm_xor_si128(buf[1],buf[3]), buf[2], buf[3]};
-    const  __m128i *pbuf;
+    const __m128i pbuf_copy[4] = {_mm_xor_si128(buf[0],buf[2]), _mm_xor_si128(buf[1],buf[3]), buf[2], buf[3]}; 
+    const  __m128i *pbuf; 
 
     // divide key mask by 16 from bytes to __m128i
     keyMask >>= 4;
@@ -895,7 +894,7 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_2_port(__m128i *randomso
     for (int64_t i = 0; i < 32; i++)
     {
         //std::cout << "LOOP " << i << " acc: " << LEToHex(acc) << std::endl;
-
+        
         const uint64_t selector = _mm_cvtsi128_si64_emu(acc);
 
         // get two random locations in the key, which will be mutated and swapped
@@ -1106,7 +1105,6 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_2_port(__m128i *randomso
             case 0x18:
             {
                 const __m128i *buftmp = pbuf - (((selector & 1) << 1) - 1);
-                __m128i tmp; // used by MIX2
 
                 uint64_t rounds = selector >> 61; // loop randomly between 1 and 8 times
                 __m128i *rc = prand;
@@ -1158,7 +1156,7 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_2_port(__m128i *randomso
 
                 acc = _mm_xor_si128_emu(tempa3, acc);
                 const __m128i temp4 = _mm_load_si128_emu(pbuf - (((selector & 1) << 1) - 1));
-                acc = _mm_xor_si128_emu(temp4,acc);
+                acc = _mm_xor_si128_emu(temp4,acc);  
                 const __m128i tempb1 = _mm_mulhrs_epi16_emu(acc, tempa3);
                 const __m128i tempb2 = _mm_xor_si128_emu(tempb1, tempa3);
                 _mm_store_si128_emu(prandex, tempb2);
@@ -1169,7 +1167,7 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_2_port(__m128i *randomso
     return acc;
 }
 
-// hashes 64 bytes only by doing a carryless multiplication and reduction of the repeated 64 byte sequence 16 times,
+// hashes 64 bytes only by doing a carryless multiplication and reduction of the repeated 64 byte sequence 16 times, 
 // returning a 64 bit hash value
 uint64_t verusclhash_port(void * random, const unsigned char buf[64], uint64_t keyMask, __m128i **pMoveScratch) {
     __m128i * rs64 = (__m128i *)random;
@@ -1180,7 +1178,7 @@ uint64_t verusclhash_port(void * random, const unsigned char buf[64], uint64_t k
     return precompReduction64_port(acc);
 }
 
-// hashes 64 bytes only by doing a carryless multiplication and reduction of the repeated 64 byte sequence 16 times,
+// hashes 64 bytes only by doing a carryless multiplication and reduction of the repeated 64 byte sequence 16 times, 
 // returning a 64 bit hash value
 uint64_t verusclhash_sv2_1_port(void * random, const unsigned char buf[64], uint64_t keyMask, __m128i **pMoveScratch) {
     __m128i * rs64 = (__m128i *)random;

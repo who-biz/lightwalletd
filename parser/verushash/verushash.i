@@ -6,7 +6,7 @@
 %}
 
 %insert(cgo_comment_typedefs) %{
-#cgo LDFLAGS: -L${SRCDIR}  -l:libverushash.a
+#cgo LDFLAGS: -L${SRCDIR}  -l:libverushash.a -lsodium
 %}
 
 

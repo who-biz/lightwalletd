@@ -9,8 +9,8 @@ inputs only, Verus Hash takes any length of input and produces a 256
 bit output.
 */
 #include <string.h>
-#include "../include/common.h"
-#include "../include/verus_hash.h"
+#include "common.h"
+#include "verus_hash.h"
 
 void (*CVerusHash::haraka512Function)(unsigned char *out, const unsigned char *in);
 

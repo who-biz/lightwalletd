@@ -25,10 +25,7 @@ class base_blob
 {
 protected:
     enum { WIDTH=BITS/8 };
-            #ifndef SWIG
-
     uint8_t _ALIGN(4) data[WIDTH];
-    #endif
 public:
     base_blob()
     {
@@ -87,6 +84,18 @@ public:
     unsigned int GetSerializeSize(int nType, int nVersion) const
     {
         return sizeof(data);
+    }
+
+    template<typename Stream>
+    void Serialize(Stream& s) const
+    {
+        s.write((char*)data, sizeof(data));
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream& s)
+    {
+        s.read((char*)data, sizeof(data));
     }
 
     template<typename Stream>

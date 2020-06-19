@@ -227,12 +227,9 @@ class CVerusHashV2
 
     private:
         // only buf1, the first source, needs to be zero initialized
-        #ifndef SWIG
         alignas(32) unsigned char buf1[64] = {0}, buf2[64];
-        #endif
         unsigned char *curBuf = buf1, *result = buf2;
         size_t curPos = 0;
-
 };
 
 extern void verus_hash(void *result, const void *data, size_t len);

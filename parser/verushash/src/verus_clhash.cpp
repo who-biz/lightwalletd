@@ -17,7 +17,7 @@
  *
  **/
 
-#include "../include/verus_hash.h"
+#include "verus_hash.h"
 
 #include <assert.h>
 #include <string.h>
@@ -94,7 +94,7 @@ __m128i _mm_cvtsi64_si128(uint64_t lo)
 
  static inline __attribute__((always_inline))  __m128i _mm_clmulepi64_si128(const __m128i a, const __m128i &b, int imm)
 {
- return  (__m128i)vmull_p64(vgetq_lane_u64(a, 1), vgetq_lane_u64(b,0));
+ return  (__m128i)vmull_p64(vgetq_lane_u64(a, 1), vgetq_lane_u64(b,0)); 
 
 }
 
@@ -144,7 +144,7 @@ __m128i _mm_loadl_epi64(__m128i *a)
 	__m128i b = {0}; ((uint64_t*)&b)[0] = ((uint64_t*)a)[0];
 	return b;
 }
-#endif
+#endif 
 
 // multiply the length and the some key, no modulo
     static inline __attribute__((always_inline)) __m128i lazyLengthHash(uint64_t keylength, uint64_t length) {
@@ -232,7 +232,7 @@ __m128i __verusclmulwithoutreduction64alignedrepeat(__m128i *randomsource, const
         __m128i *prandex = randomsource + ((selector >> 32) & keyMask);
 
         *(pMoveScratch++) = prand;
-        *(pMoveScratch++) = prandex;
+        *(pMoveScratch++) = prandex;        
 
         // select random start and order of pbuf processing
         pbuf = buf + (selector & 3);
@@ -468,7 +468,7 @@ __m128i __verusclmulwithoutreduction64alignedrepeat(__m128i *randomsource, const
     return acc;
 }
 
-// hashes 64 bytes only by doing a carryless multiplication and reduction of the repeated 64 byte sequence 16 times,
+// hashes 64 bytes only by doing a carryless multiplication and reduction of the repeated 64 byte sequence 16 times, 
 // returning a 64 bit hash value
 uint64_t verusclhash(void * random, const unsigned char buf[64], uint64_t keyMask, __m128i **pMoveScratch) {
     __m128i  acc = __verusclmulwithoutreduction64alignedrepeat((__m128i *)random, (const __m128i *)buf, keyMask, pMoveScratch);
@@ -476,7 +476,7 @@ uint64_t verusclhash(void * random, const unsigned char buf[64], uint64_t keyMas
     return precompReduction64(acc);
 }
 
-// hashes 64 bytes only by doing a carryless multiplication and reduction of the repeated 64 byte sequence 16 times,
+// hashes 64 bytes only by doing a carryless multiplication and reduction of the repeated 64 byte sequence 16 times, 
 // returning a 64 bit hash value
 uint64_t verusclhash_sv2_1(void * random, const unsigned char buf[64], uint64_t keyMask, __m128i **pMoveScratch) {
     __m128i acc = __verusclmulwithoutreduction64alignedrepeat_sv2_1((__m128i *)random, (const __m128i *)buf, keyMask, pMoveScratch);
@@ -493,7 +493,7 @@ uint64_t verusclhash_sv2_2(void * random, const unsigned char buf[64], uint64_t 
 __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_1(__m128i *randomsource, const __m128i buf[4], uint64_t keyMask, __m128i **pMoveScratch)
 {
     const __m128i pbuf_copy[4] = {_mm_xor_si128(buf[0], buf[2]), _mm_xor_si128(buf[1], buf[3]), buf[2], buf[3]};
-    const __m128i *pbuf;
+    const __m128i *pbuf; 
 
     // divide key mask by 16 from bytes to __m128i
     keyMask >>= 4;
@@ -512,7 +512,7 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_1(__m128i *randomsource,
         __m128i *prandex = randomsource + ((selector >> 32) & keyMask);
 
         *(pMoveScratch++) = prand;
-        *(pMoveScratch++) = prandex;
+        *(pMoveScratch++) = prandex;        
 
         // select random start and order of pbuf processing
         pbuf = pbuf_copy + (selector & 3);
@@ -709,7 +709,6 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_1(__m128i *randomsource,
             case 0x18:
             {
                 const __m128i *buftmp = pbuf - (((selector & 1) << 1) - 1);
-                __m128i tmp; // used by MIX2
 
                 uint64_t rounds = selector >> 61; // loop randomly between 1 and 8 times
                 __m128i *rc = prand;
@@ -793,7 +792,7 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_2(__m128i *randomsource,
         __m128i *prandex = randomsource + ((selector >> 32) & keyMask);
 
         *(pMoveScratch++) = prand;
-        *(pMoveScratch++) = prandex;
+        *(pMoveScratch++) = prandex;        
 
         // select random start and order of pbuf processing
         pbuf = pbuf_copy + (selector & 3);
@@ -992,7 +991,6 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_2(__m128i *randomsource,
             case 0x18:
             {
                 const __m128i *buftmp = pbuf - (((selector & 1) << 1) - 1);
-                __m128i tmp; // used by MIX2
 
                 uint64_t rounds = selector >> 61; // loop randomly between 1 and 8 times
                 __m128i *rc = prand;
@@ -1044,8 +1042,8 @@ __m128i __verusclmulwithoutreduction64alignedrepeat_sv2_2(__m128i *randomsource,
                 _mm_store_si128(prand, tempa2);
 
                 acc = _mm_xor_si128(tempa3, acc);
-                const __m128i temp4 = _mm_load_si128(pbuf - (((selector & 1) << 1) - 1));
-                acc = _mm_xor_si128(temp4,acc);
+                const __m128i temp4 = _mm_load_si128(pbuf - (((selector & 1) << 1) - 1)); 
+                acc = _mm_xor_si128(temp4,acc);  
                 const __m128i tempb1 = _mm_mulhrs_epi16(acc, tempa3);
                 const __m128i tempb2 = _mm_xor_si128(tempb1, tempa3);
                 _mm_store_si128(prandex, tempb2);

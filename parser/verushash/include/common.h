@@ -22,12 +22,12 @@
 //#if defined(NDEBUG)
 //# error "Bitcoin cannot be compiled without assertions."
 //#endif
-        #ifndef SWIG
 
 uint16_t static inline ReadLE16(const unsigned char* ptr)
 {
     return le16toh(*((uint16_t*)ptr));
 }
+
 uint32_t static inline ReadLE32(const unsigned char* ptr)
 {
     return le32toh(*((uint32_t*)ptr));
@@ -72,7 +72,6 @@ void static inline WriteBE64(unsigned char* ptr, uint64_t x)
 {
     *((uint64_t*)ptr) = htobe64(x);
 }
-#endif
 
 /*int inline init_and_check_sodium()
 {

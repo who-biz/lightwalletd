@@ -5,7 +5,7 @@ Plain C implementation of the Haraka256 and Haraka512 permutations.
 #include <string.h>
 #include <stdlib.h>
 
-#include "../include/haraka_portable.h"
+#include "haraka_portable.h"
 
 #define HARAKAS_RATE 32
 

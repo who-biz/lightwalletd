@@ -11,10 +11,18 @@ add_library(verushash STATIC
         src/verus_hash.cpp
         src/verus_clhash.cpp
         src/verus_clhash_portable.cpp
+        src/ripemd160.cpp
+        src/sha256.cpp
+        compat/glibc_compat.cpp
+        compat/glibc_sanity.cpp
+        compat/glibcxx_sanity.cpp
+        compat/strnlen.cpp
+        support/cleanse.cpp
+        blockhash.cpp
         )
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=x86-64 -fPIC")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=x86-64  -fPIC")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=x86-64")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=x86-64 ")
 
     # optimizations
     add_definitions(-O2)
