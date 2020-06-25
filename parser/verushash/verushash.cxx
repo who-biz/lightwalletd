@@ -32,9 +32,9 @@ void Verushash::anyverushash_height(const char * bytes, int length, void * hashr
     if (bytes[0] == 4 and bytes[2] >= 1) {
             if (bytes[2] < 3) {
                 if (height > 800199) {
-                    verushash_v2b1_reverse(bytes, length, hashresult);
+                    verushash_v2b1(bytes, length, hashresult);
                 } else {
-                    verushash_v2b_reverse(bytes, length, hashresult);
+                    verushash_v2b(bytes, length, hashresult);
                 }
             } else {
                 verushash_v2b1(bytes, length, hashresult);
@@ -119,6 +119,21 @@ void Verushash::verushash_v2b1(const char * bytes, int length, void * hashresult
 
 void Verushash::verushash_v2b1_reverse(const char * bytes, int length, void * hashresult) {
     verushash_v2b1(bytes, length, hashresult);
+    reverse((char *) hashresult);
+}
+
+void Verushash::verushash_v2b2(const char * bytes, int length, void * hashresult) {
+    //std::cout << ":verushash_v2b2\n";
+    initialize();
+    CVerusHashV2 vh2b2(SOLUTION_VERUSHHASH_V2_2);
+    vh2b2.Reset();
+    vh2b2.Write((const unsigned char*) bytes, length);
+    vh2b2.Finalize2b((unsigned char*) hashresult);
+}
+
+void Verushash::verushash_v2b2_reverse(const char * bytes, int length, void * hashresult) {
+    //std::cout << ":verushash_v2b2_reverse\n";
+    verushash_v2b2(bytes, length, hashresult);
     reverse((char *) hashresult);
 }
 
