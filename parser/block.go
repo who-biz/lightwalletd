@@ -36,14 +36,14 @@ func (b *Block) Transactions() []*Transaction {
 
 // GetDisplayHash returns the block hash in big-endian display order.
 func (b *Block) GetDisplayHash() []byte {
-	return b.hdr.GetDisplayHash(b.height)
+	return b.hdr.GetDisplayHash()
 }
 
 // TODO: encode hash endianness in a type?
 
 // GetEncodableHash returns the block hash in little-endian wire order.
-func (b *Block) GetEncodableHash(height int) []byte {
-	return b.hdr.GetEncodableHash(height)
+func (b *Block) GetEncodableHash() []byte {
+	return b.hdr.GetEncodableHash()
 }
 
 // GetDisplayPrevHash returns the prevHash field from b *Block
@@ -102,7 +102,7 @@ func (b *Block) ToCompact() *walletrpc.CompactBlock {
 		//TODO ProtoVersion: 1,
 		Height:   uint64(b.GetHeight()),
 		PrevHash: b.hdr.HashPrevBlock,
-		Hash:     b.GetEncodableHash(b.height),
+		Hash:     b.GetEncodableHash(),
 		Time:     b.hdr.Time,
 	}
 

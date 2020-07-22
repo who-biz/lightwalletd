@@ -273,7 +273,7 @@ type Transaction struct {
 }
 
 // GetDisplayHash returns the transaction hash in big-endian display order.
-func (tx *Transaction) GetDisplayHash(height int) []byte {
+func (tx *Transaction) GetDisplayHash() []byte {
 	if tx.txId != nil {
 		return tx.txId
 	}
@@ -287,7 +287,7 @@ func (tx *Transaction) GetDisplayHash(height int) []byte {
 }
 
 // GetEncodableHash returns the transaction hash in little-endian wire format order.
-func (tx *Transaction) GetEncodableHash(height int) []byte {
+func (tx *Transaction) GetEncodableHash() []byte {
 
 	hash := make([]byte, 32)
 	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
@@ -307,7 +307,7 @@ func (tx *Transaction) HasSaplingElements() bool {
 func (tx *Transaction) ToCompact(index int, height int) *walletrpc.CompactTx {
 	ctx := &walletrpc.CompactTx{
 		Index: uint64(index), // index is contextual
-		Hash:  tx.GetEncodableHash(height),
+		Hash:  tx.GetEncodableHash(),
 		//Fee:     0, // TODO: calculate fees
 		Spends:  make([]*walletrpc.CompactSpend, len(tx.shieldedSpends)),
 		Outputs: make([]*walletrpc.CompactOutput, len(tx.shieldedOutputs)),

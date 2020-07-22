@@ -209,7 +209,7 @@ func parseNBits(b []byte) *big.Int {
 }
 
 // GetDisplayHash returns the bytes of a block hash in big-endian order.
-func (hdr *BlockHeader) GetDisplayHash(height int) []byte {
+func (hdr *BlockHeader) GetDisplayHash() []byte {
 	if hdr.cachedHash != nil {
 		return hdr.cachedHash
 	}
@@ -229,7 +229,7 @@ func (hdr *BlockHeader) GetDisplayHash(height int) []byte {
 }
 
 // GetEncodableHash returns the bytes of a block hash in little-endian wire order.
-func (hdr *BlockHeader) GetEncodableHash(height int) []byte {
+func (hdr *BlockHeader) GetEncodableHash() []byte {
 	serializedHeader, err := hdr.MarshalBinary()
 
 	if err != nil {
