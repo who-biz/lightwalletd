@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <vector>
+#include <iostream>
 
 #include "include/verus_hash.h"
 
@@ -18,27 +19,15 @@ void Verushash::initialize() {
 
 void Verushash::anyverushash(const char * bytes, int length, void * hashresult) {
     if (bytes[0] == 4 and bytes[2] >= 1) {
-            if (bytes[2] < 3) {
-                verushash_v2b(bytes, length, hashresult);
-            } else {
+        if (length < 144 || bytes[143] < 3) {
+            verushash_v2b(bytes, length, hashresult);
+        } else {
+            if (bytes[143] < 4) {
                 verushash_v2b1(bytes, length, hashresult);
-            }
-    } else {
-                verushash(bytes, length, hashresult);
-    }
-}
-
-void Verushash::anyverushash_height(const char * bytes, int length, void * hashresult, int height) {
-    if (bytes[0] == 4 and bytes[2] >= 1) {
-            if (bytes[2] < 3) {
-                if (height > 800199) {
-                    verushash_v2b1(bytes, length, hashresult);
-                } else {
-                    verushash_v2b(bytes, length, hashresult);
-                }
             } else {
-                verushash_v2b1(bytes, length, hashresult);
+                verushash_v2b2(bytes, length, hashresult);
             }
+        }
     } else {
                 verushash(bytes, length, hashresult);
     }
@@ -46,31 +35,20 @@ void Verushash::anyverushash_height(const char * bytes, int length, void * hashr
 
 void Verushash::anyverushash_reverse(const char * bytes, int length, void * hashresult) {
     if (bytes[0] == 4 and bytes[2] >= 1) {
-            if (bytes[2] < 3) {
+        if (length < 144 || bytes[143] < 3) {
                 verushash_v2b_reverse(bytes, length, hashresult);
-            } else {
+        } else {
+            if (bytes[143] < 4) {
                 verushash_v2b1_reverse(bytes, length, hashresult);
+            } else {
+                verushash_v2b2_reverse(bytes, length, hashresult);
             }
+        }
     } else {
-            verushash_reverse(bytes, length, hashresult);
+        verushash_reverse(bytes, length, hashresult);
     }
 }
 
-void Verushash::anyverushash_reverse_height(const char * bytes, int length, void * hashresult, int height) {
-    if (bytes[0] == 4 and bytes[2] >= 1) {
-            if (bytes[2] < 3) {
-                if (height > 800199) {
-                    verushash_v2b1_reverse(bytes, length, hashresult);
-                } else {
-                    verushash_v2b_reverse(bytes, length, hashresult);
-                }
-            } else {
-                verushash_v2b1_reverse(bytes, length, hashresult);
-            }
-    } else {
-            verushash_reverse(bytes, length, hashresult);
-    }
-}
 
 void Verushash::verushash(const char * bytes, int length, void * hashresult) {
     initialize();

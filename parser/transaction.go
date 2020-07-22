@@ -281,7 +281,7 @@ func (tx *Transaction) GetDisplayHash(height int) []byte {
 	// VerusHash
 	hash := make([]byte, 32)
 	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
-	VerusHash.Anyverushash_reverse_height(string(tx.rawBytes), len(tx.rawBytes), ptrHash, height)
+	VerusHash.Anyverushash_reverse(string(tx.rawBytes), len(tx.rawBytes), ptrHash)
 	tx.txId = hash
 	return tx.txId
 }
@@ -292,7 +292,7 @@ func (tx *Transaction) GetEncodableHash(height int) []byte {
 	hash := make([]byte, 32)
 	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
 
-	VerusHash.Anyverushash_height(string(tx.rawBytes), len(tx.rawBytes), ptrHash, height)
+	VerusHash.Anyverushash(string(tx.rawBytes), len(tx.rawBytes), ptrHash)
 	return hash
 }
 

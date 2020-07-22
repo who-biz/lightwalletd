@@ -222,7 +222,7 @@ func (hdr *BlockHeader) GetDisplayHash(height int) []byte {
 	// VerusHash
 	hash := make([]byte, 32)
 	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
-	VerusHash.Anyverushash_reverse_height(string(serializedHeader), len(string(serializedHeader)), ptrHash, height)
+	VerusHash.Anyverushash_reverse(string(serializedHeader), len(string(serializedHeader)), ptrHash)
 
 	hdr.cachedHash = hash
 	return hdr.cachedHash
@@ -238,7 +238,7 @@ func (hdr *BlockHeader) GetEncodableHash(height int) []byte {
 
 	hash := make([]byte, 32)
 	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
-	VerusHash.Anyverushash_height(string(serializedHeader), len(string(serializedHeader)), ptrHash, height)
+	VerusHash.Anyverushash(string(serializedHeader), len(string(serializedHeader)), ptrHash)
 
 	return hash
 }
