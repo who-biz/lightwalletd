@@ -110,7 +110,7 @@ func (b *Block) ToCompact() *walletrpc.CompactBlock {
 	saplingTxns := make([]*walletrpc.CompactTx, 0, len(b.vtx))
 	for idx, tx := range b.vtx {
 		if tx.HasSaplingElements() {
-			saplingTxns = append(saplingTxns, tx.ToCompact(idx, b.height))
+			saplingTxns = append(saplingTxns, tx.ToCompact(idx))
 		}
 	}
 	compactBlock.Vtx = saplingTxns

@@ -304,7 +304,7 @@ func (tx *Transaction) HasSaplingElements() bool {
 	return tx.version >= 4 && (len(tx.shieldedSpends)+len(tx.shieldedOutputs)) > 0
 }
 
-func (tx *Transaction) ToCompact(index int, height int) *walletrpc.CompactTx {
+func (tx *Transaction) ToCompact(index int) *walletrpc.CompactTx {
 	ctx := &walletrpc.CompactTx{
 		Index: uint64(index), // index is contextual
 		Hash:  tx.GetEncodableHash(),
