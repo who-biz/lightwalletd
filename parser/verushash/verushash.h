@@ -8,22 +8,15 @@
 #define _VERUSHASH_H_/* File : veruhash.h */
 
 #include <stdio.h>
+#include <string>
 class Verushash {
 public:
   bool initialized = false;
   void initialize();
-  void anyverushash(const char * bytes, int length, void * hashresult);
-  void anyverushash_reverse(const char * bytes, int length, void * hashresult);
-  void verushash(const char * bytes, int length, void * hashresult);
-  void verushash_reverse(const char * bytes, int length, void * hashresult);
-  void verushash_v2(const char * bytes, int length, void * hashresult);
-  void verushash_v2_reverse(const char * bytes, int length, void * hashresult);
-  void verushash_v2b(const char * bytes, int length, void * hashresult);
-  void verushash_v2b_reverse(const char * bytes, int length, void * hashresult);
-  void verushash_v2b1(const char * bytes, int length, void * hashresult);
-  void verushash_v2b1_reverse(const char * bytes, int length, void * hashresult);
-  void verushash_v2b2(const char * bytes, int length, void * hashresult);
-  void verushash_v2b2_reverse(const char * bytes, int length, void * hashresult);
-  void reverse(char * swapme);
+  void * verushash(char const * bytes, size_t length);
+  void * verushash_v2(const unsigned char * bytes, size_t length);
+  void * verushash_v2b(const unsigned char * bytes, size_t length);
+  void * verushash_v2b1(const unsigned char * bytes, size_t length);
+  void * verushash_v2b2(const std::string bytes);
 };
 #endif
