@@ -25,18 +25,14 @@ void Verushash::initialize() {
 
 
 void Verushash::verushash(const char * bytes, int length, void * ptrResult) {
-    char *result = new char[32];
-    
     if (initialized == false) {
         initialize();
     }
-    verus_hash(result, bytes, length);
-    memcpy(ptrResult, result, 32);
+    verus_hash(ptrResult, bytes, length);
 }
 
 void Verushash::verushash_v2(const char * bytes, int length, void * ptrResult) {
     CVerusHashV2 vh2(SOLUTION_VERUSHHASH_V2);
-    unsigned char *result = new unsigned char[32];
     
     if (initialized == false) {
         initialize();
@@ -44,13 +40,11 @@ void Verushash::verushash_v2(const char * bytes, int length, void * ptrResult) {
 
     vh2.Reset();
     vh2.Write((unsigned char *) bytes, length);
-    vh2.Finalize(result);
-    memcpy(ptrResult, result, 32);
+    vh2.Finalize((unsigned char *) ptrResult);
 }
 
 void Verushash::verushash_v2b(const char * bytes, int length, void * ptrResult) {
     CVerusHashV2 vh2(SOLUTION_VERUSHHASH_V2);
-    unsigned char *result = new unsigned char[32];
     
     if (initialized == false) {
         initialize();
@@ -58,22 +52,19 @@ void Verushash::verushash_v2b(const char * bytes, int length, void * ptrResult) 
 
     vh2.Reset();
     vh2.Write((unsigned char *) bytes, length);
-    vh2.Finalize2b(result);
-    memcpy(ptrResult, result, 32);
+    vh2.Finalize2b((unsigned char *) ptrResult);
 }
 
 void Verushash::verushash_v2b1(std::string const bytes, int length, void * ptrResult) {
     CVerusHashV2 vh2b1(SOLUTION_VERUSHHASH_V2_1);
-    unsigned char *result = new unsigned char[32];
-    
+
     if (initialized == false) {
         initialize();
     }
 
     vh2b1.Reset();
     vh2b1.Write((unsigned char *) &bytes[0], length);
-    vh2b1.Finalize2b(result);
-    memcpy(ptrResult, result, 32);
+    vh2b1.Finalize2b((unsigned char *) ptrResult);
 }
 
 void Verushash::verushash_v2b2(std::string const bytes, void * ptrResult)
