@@ -10,7 +10,9 @@ __debug_bin
 .vscode
 CMakeCache.txt
 Makefile
-
+.idea
+cert.*
+*.conf
 *.cmake
 *.log
 *.a

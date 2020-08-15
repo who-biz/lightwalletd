@@ -8,7 +8,11 @@ function with a Haraka V2 core. Unlike Haraka, which is made for short
 inputs only, Verus Hash takes any length of input and produces a 256 
 bit output.
 */
-#include <string.h>
+
+#include <string>
+#include <stdint.h>
+#include <vector>
+
 #include "common.h"
 #include "verus_hash.h"
 
@@ -125,6 +129,7 @@ void CVerusHashV2::Hash(void *result, const void *data, size_t _len)
     int len = _len, pos = 0, nextOffset = 64;
     unsigned char *bufPtr2 = bufPtr + nextOffset;
     unsigned char *ptr = (unsigned char *)data;
+
 
     // put our last result or zero at beginning of buffer each time
     memset(bufPtr, 0, 32);

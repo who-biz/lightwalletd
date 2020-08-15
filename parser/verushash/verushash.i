@@ -1,6 +1,8 @@
 /* File : verushash.i */
 %module verushash
-
+%include "std_string.i"
+%include "carrays.i"
+%include "cdata.i"
 %{
 #include "verushash.h"
 %}

@@ -6,139 +6,87 @@
 #include <vector>
 
 #include "include/verus_hash.h"
+#include "solutiondata.h"
+
+#include <sstream>
+
+bool initialized = false;
+
 
 void Verushash::initialize() {
     if (!initialized)
     {
         CVerusHash::init();
         CVerusHashV2::init();
+        sodium_init();
     }
     initialized = true;
 }
 
-void Verushash::anyverushash(const char * bytes, int length, void * hashresult) {
-    if (bytes[0] == 4 and bytes[2] >= 1) {
-            if (bytes[2] < 3) {
-                verushash_v2b(bytes, length, hashresult);
-            } else {
-                verushash_v2b1(bytes, length, hashresult);
-            }
-    } else {
-                verushash(bytes, length, hashresult);
+
+void Verushash::verushash(const char * bytes, int length, void * ptrResult) {
+    if (initialized == false) {
+        initialize();
     }
+    verus_hash(ptrResult, bytes, length);
 }
 
-void Verushash::anyverushash_height(const char * bytes, int length, void * hashresult, int height) {
-    if (bytes[0] == 4 and bytes[2] >= 1) {
-            if (bytes[2] < 3) {
-                if (height > 800199) {
-                    verushash_v2b1(bytes, length, hashresult);
-                } else {
-                    verushash_v2b(bytes, length, hashresult);
-                }
-            } else {
-                verushash_v2b1(bytes, length, hashresult);
-            }
-    } else {
-                verushash(bytes, length, hashresult);
-    }
-}
-
-void Verushash::anyverushash_reverse(const char * bytes, int length, void * hashresult) {
-    if (bytes[0] == 4 and bytes[2] >= 1) {
-            if (bytes[2] < 3) {
-                verushash_v2b_reverse(bytes, length, hashresult);
-            } else {
-                verushash_v2b1_reverse(bytes, length, hashresult);
-            }
-    } else {
-            verushash_reverse(bytes, length, hashresult);
-    }
-}
-
-void Verushash::anyverushash_reverse_height(const char * bytes, int length, void * hashresult, int height) {
-    if (bytes[0] == 4 and bytes[2] >= 1) {
-            if (bytes[2] < 3) {
-                if (height > 800199) {
-                    verushash_v2b1_reverse(bytes, length, hashresult);
-                } else {
-                    verushash_v2b_reverse(bytes, length, hashresult);
-                }
-            } else {
-                verushash_v2b1_reverse(bytes, length, hashresult);
-            }
-    } else {
-            verushash_reverse(bytes, length, hashresult);
-    }
-}
-
-void Verushash::verushash(const char * bytes, int length, void * hashresult) {
-    initialize();
-    verus_hash(hashresult, bytes, length);
-}
-
-void Verushash::verushash_reverse(const char * bytes, int length, void * hashresult) {
-    verushash(bytes, length, hashresult);
-    char * chash = (char *) hashresult;
-    reverse((char *) hashresult);
-}
-
-void Verushash::verushash_v2(const char * bytes, int length, void * hashresult) {
-    initialize();
+void Verushash::verushash_v2(const char * bytes, int length, void * ptrResult) {
     CVerusHashV2 vh2(SOLUTION_VERUSHHASH_V2);
+    
+    if (initialized == false) {
+        initialize();
+    }
+
     vh2.Reset();
-    vh2.Write((const unsigned char*) bytes, length);
-    vh2.Finalize((unsigned char*) hashresult);
+    vh2.Write((unsigned char *) bytes, length);
+    vh2.Finalize((unsigned char *) ptrResult);
 }
 
-void Verushash::verushash_v2_reverse(const char * bytes, int length, void * hashresult) {
-    verushash_v2(bytes, length, hashresult);
-    reverse((char *) hashresult);
-}
-
-void Verushash::verushash_v2b(const char * bytes, int length, void * hashresult) {
-    initialize();
+void Verushash::verushash_v2b(const char * bytes, int length, void * ptrResult) {
     CVerusHashV2 vh2(SOLUTION_VERUSHHASH_V2);
+    
+    if (initialized == false) {
+        initialize();
+    }
+
     vh2.Reset();
-    vh2.Write((const unsigned char*) bytes, length);
-    vh2.Finalize2b((unsigned char*) hashresult);
+    vh2.Write((unsigned char *) bytes, length);
+    vh2.Finalize2b((unsigned char *) ptrResult);
 }
 
-void Verushash::verushash_v2b_reverse(const char * bytes, int length, void * hashresult) {
-    verushash_v2b(bytes, length, hashresult);
-    reverse((char *) hashresult);
-}
-
-void Verushash::verushash_v2b1(const char * bytes, int length, void * hashresult) {
-    initialize();
+void Verushash::verushash_v2b1(std::string const bytes, int length, void * ptrResult) {
     CVerusHashV2 vh2b1(SOLUTION_VERUSHHASH_V2_1);
-    vh2b1.Reset();
-    vh2b1.Write((const unsigned char*) bytes, length);
-    vh2b1.Finalize2b((unsigned char*) hashresult);
-}
 
-void Verushash::verushash_v2b1_reverse(const char * bytes, int length, void * hashresult) {
-    verushash_v2b1(bytes, length, hashresult);
-    reverse((char *) hashresult);
-}
-
-void Verushash::verushash_v2b2(const char * bytes, int length, void * hashresult) {
-    //std::cout << ":verushash_v2b2\n";
-    initialize();
-    CVerusHashV2 vh2b2(SOLUTION_VERUSHHASH_V2_2);
-    vh2b2.Reset();
-    vh2b2.Write((const unsigned char*) bytes, length);
-    vh2b2.Finalize2b((unsigned char*) hashresult);
-}
-
-void Verushash::verushash_v2b2_reverse(const char * bytes, int length, void * hashresult) {
-    //std::cout << ":verushash_v2b2_reverse\n";
-    verushash_v2b2(bytes, length, hashresult);
-    reverse((char *) hashresult);
-}
-
-void Verushash::reverse(char * swapme) {
-    for (int i=0; i<16; i++) {
-            swapme[i], swapme[31 - i] = swapme[31 - i], swapme[i];
+    if (initialized == false) {
+        initialize();
     }
+
+    vh2b1.Reset();
+    vh2b1.Write((unsigned char *) &bytes[0], length);
+    vh2b1.Finalize2b((unsigned char *) ptrResult);
+}
+
+void Verushash::verushash_v2b2(std::string const bytes, void * ptrResult)
+{
+    uint256 result;
+
+
+    if (initialized == false) {
+        initialize();
+    }
+
+    CBlockHeader bh;
+    CDataStream s(bytes.data(), bytes.data() + bytes.size(), SER_GETHASH, 0);
+
+    try
+    {
+        s >> bh;
+        result = bh.GetVerusV2Hash();
+    }
+    catch(const std::exception& e)
+    {
+    }
+
+    memcpy(ptrResult, &result, 32);
 }
