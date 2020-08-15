@@ -32,20 +32,21 @@ typedef struct { void* array; intgo len; intgo cap; } _goslice_;
 #cgo LDFLAGS: -L${SRCDIR}  -l:libverushash.a -lsodium
 
 typedef _gostring_ swig_type_1;
-typedef long long swig_type_2;
-typedef long long swig_type_3;
-typedef long long swig_type_4;
-typedef long long swig_type_5;
+typedef _gostring_ swig_type_2;
+typedef _gostring_ swig_type_3;
+typedef _gostring_ swig_type_4;
+typedef _gostring_ swig_type_5;
+typedef _gostring_ swig_type_6;
 extern void _wrap_Swig_free_verushash_c89415b43d900127(uintptr_t arg1);
 extern uintptr_t _wrap_Swig_malloc_verushash_c89415b43d900127(swig_intgo arg1);
 extern void _wrap_Verushash_initialized_set_verushash_c89415b43d900127(uintptr_t arg1, _Bool arg2);
 extern _Bool _wrap_Verushash_initialized_get_verushash_c89415b43d900127(uintptr_t arg1);
 extern void _wrap_Verushash_initialize_verushash_c89415b43d900127(uintptr_t arg1);
-extern uintptr_t _wrap_Verushash_verushash_verushash_c89415b43d900127(uintptr_t arg1, swig_type_1 arg2, swig_type_2 arg3);
-extern uintptr_t _wrap_Verushash_verushash_v2_verushash_c89415b43d900127(uintptr_t arg1, swig_voidp arg2, swig_type_3 arg3);
-extern uintptr_t _wrap_Verushash_verushash_v2b_verushash_c89415b43d900127(uintptr_t arg1, swig_voidp arg2, swig_type_4 arg3);
-extern uintptr_t _wrap_Verushash_verushash_v2b1_verushash_c89415b43d900127(uintptr_t arg1, swig_voidp arg2, swig_type_5 arg3);
-extern uintptr_t _wrap_Verushash_verushash_v2b2_verushash_c89415b43d900127(uintptr_t arg1, uintptr_t arg2);
+extern void _wrap_Verushash_verushash_verushash_c89415b43d900127(uintptr_t arg1, swig_type_1 arg2, swig_intgo arg3, swig_type_2 arg4);
+extern void _wrap_Verushash_verushash_v2_verushash_c89415b43d900127(uintptr_t arg1, swig_voidp arg2, swig_intgo arg3, swig_type_3 arg4);
+extern void _wrap_Verushash_verushash_v2b_verushash_c89415b43d900127(uintptr_t arg1, swig_voidp arg2, swig_intgo arg3, swig_type_4 arg4);
+extern void _wrap_Verushash_verushash_v2b1_verushash_c89415b43d900127(uintptr_t arg1, uintptr_t arg2, swig_intgo arg3, swig_type_5 arg4);
+extern void _wrap_Verushash_verushash_v2b2_verushash_c89415b43d900127(uintptr_t arg1, uintptr_t arg2, swig_type_6 arg3);
 extern uintptr_t _wrap_new_Verushash_verushash_c89415b43d900127(void);
 extern void _wrap_delete_Verushash_verushash_c89415b43d900127(uintptr_t arg1);
 #undef intgo
@@ -110,51 +111,61 @@ func (arg1 SwigcptrVerushash) Initialize() {
 	C._wrap_Verushash_initialize_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0))
 }
 
-func (arg1 SwigcptrVerushash) Verushash(arg2 string, arg3 int64) (_swig_ret uintptr) {
-	var swig_r uintptr
+func (arg1 SwigcptrVerushash) Verushash(arg2 string, arg3 int, arg4 string) {
 	_swig_i_0 := arg1
 	_swig_i_1 := arg2
 	_swig_i_2 := arg3
-	swig_r = (uintptr)(C._wrap_Verushash_verushash_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0), *(*C.swig_type_1)(unsafe.Pointer(&_swig_i_1)), C.swig_type_2(_swig_i_2)))
+	_swig_i_3 := arg4
+	C._wrap_Verushash_verushash_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0), *(*C.swig_type_1)(unsafe.Pointer(&_swig_i_1)), C.swig_intgo(_swig_i_2), *(*C.swig_type_2)(unsafe.Pointer(&_swig_i_3)))
 	if Swig_escape_always_false {
 		Swig_escape_val = arg2
 	}
-	return swig_r
+	if Swig_escape_always_false {
+		Swig_escape_val = arg4
+	}
 }
 
-func (arg1 SwigcptrVerushash) Verushash_v2(arg2 *byte, arg3 int64) (_swig_ret uintptr) {
-	var swig_r uintptr
+func (arg1 SwigcptrVerushash) Verushash_v2(arg2 *byte, arg3 int, arg4 string) {
 	_swig_i_0 := arg1
 	_swig_i_1 := arg2
 	_swig_i_2 := arg3
-	swig_r = (uintptr)(C._wrap_Verushash_verushash_v2_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0), C.swig_voidp(_swig_i_1), C.swig_type_3(_swig_i_2)))
-	return swig_r
+	_swig_i_3 := arg4
+	C._wrap_Verushash_verushash_v2_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0), C.swig_voidp(_swig_i_1), C.swig_intgo(_swig_i_2), *(*C.swig_type_3)(unsafe.Pointer(&_swig_i_3)))
+	if Swig_escape_always_false {
+		Swig_escape_val = arg4
+	}
 }
 
-func (arg1 SwigcptrVerushash) Verushash_v2b(arg2 *byte, arg3 int64) (_swig_ret uintptr) {
-	var swig_r uintptr
+func (arg1 SwigcptrVerushash) Verushash_v2b(arg2 *byte, arg3 int, arg4 string) {
 	_swig_i_0 := arg1
 	_swig_i_1 := arg2
 	_swig_i_2 := arg3
-	swig_r = (uintptr)(C._wrap_Verushash_verushash_v2b_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0), C.swig_voidp(_swig_i_1), C.swig_type_4(_swig_i_2)))
-	return swig_r
+	_swig_i_3 := arg4
+	C._wrap_Verushash_verushash_v2b_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0), C.swig_voidp(_swig_i_1), C.swig_intgo(_swig_i_2), *(*C.swig_type_4)(unsafe.Pointer(&_swig_i_3)))
+	if Swig_escape_always_false {
+		Swig_escape_val = arg4
+	}
 }
 
-func (arg1 SwigcptrVerushash) Verushash_v2b1(arg2 *byte, arg3 int64) (_swig_ret uintptr) {
-	var swig_r uintptr
-	_swig_i_0 := arg1
-	_swig_i_1 := arg2
-	_swig_i_2 := arg3
-	swig_r = (uintptr)(C._wrap_Verushash_verushash_v2b1_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0), C.swig_voidp(_swig_i_1), C.swig_type_5(_swig_i_2)))
-	return swig_r
-}
-
-func (arg1 SwigcptrVerushash) Verushash_v2b2(arg2 Std_string) (_swig_ret uintptr) {
-	var swig_r uintptr
+func (arg1 SwigcptrVerushash) Verushash_v2b1(arg2 Std_string, arg3 int, arg4 string) {
 	_swig_i_0 := arg1
 	_swig_i_1 := arg2.Swigcptr()
-	swig_r = (uintptr)(C._wrap_Verushash_verushash_v2b2_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0), C.uintptr_t(_swig_i_1)))
-	return swig_r
+	_swig_i_2 := arg3
+	_swig_i_3 := arg4
+	C._wrap_Verushash_verushash_v2b1_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0), C.uintptr_t(_swig_i_1), C.swig_intgo(_swig_i_2), *(*C.swig_type_5)(unsafe.Pointer(&_swig_i_3)))
+	if Swig_escape_always_false {
+		Swig_escape_val = arg4
+	}
+}
+
+func (arg1 SwigcptrVerushash) Verushash_v2b2(arg2 Std_string, arg3 string) {
+	_swig_i_0 := arg1
+	_swig_i_1 := arg2.Swigcptr()
+	_swig_i_2 := arg3
+	C._wrap_Verushash_verushash_v2b2_verushash_c89415b43d900127(C.uintptr_t(_swig_i_0), C.uintptr_t(_swig_i_1), *(*C.swig_type_6)(unsafe.Pointer(&_swig_i_2)))
+	if Swig_escape_always_false {
+		Swig_escape_val = arg3
+	}
 }
 
 func NewVerushash() (_swig_ret Verushash) {
@@ -174,11 +185,11 @@ type Verushash interface {
 	SetInitialized(arg2 bool)
 	GetInitialized() (_swig_ret bool)
 	Initialize()
-	Verushash(arg2 string, arg3 int64) (_swig_ret uintptr)
-	Verushash_v2(arg2 *byte, arg3 int64) (_swig_ret uintptr)
-	Verushash_v2b(arg2 *byte, arg3 int64) (_swig_ret uintptr)
-	Verushash_v2b1(arg2 *byte, arg3 int64) (_swig_ret uintptr)
-	Verushash_v2b2(arg2 Std_string) (_swig_ret uintptr)
+	Verushash(arg2 string, arg3 int, arg4 string)
+	Verushash_v2(arg2 *byte, arg3 int, arg4 string)
+	Verushash_v2b(arg2 *byte, arg3 int, arg4 string)
+	Verushash_v2b1(arg2 Std_string, arg3 int, arg4 string)
+	Verushash_v2b2(arg2 Std_string, arg3 string)
 }
 
 

@@ -219,12 +219,15 @@ func (hdr *BlockHeader) GetDisplayHash() []byte {
 		return nil
 	}
 
-	// VerusHash
+	// VerusHash, reversed order
 	hash := make([]byte, 32)
 	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
-	VerusHash.Anyverushash_reverse(string(serializedHeader), len(string(serializedHeader)), ptrHash)
-
-	hdr.cachedHash = hash
+	hashHeader(serializedHeader, ptrHash)
+	reverseHash := make([]byte, 32)
+	for i := 0; i < len(hash); i++ {
+		reverseHash[31-i] = hash[i]
+	}
+	hdr.cachedHash = reverseHash
 	return hdr.cachedHash
 }
 
@@ -236,11 +239,29 @@ func (hdr *BlockHeader) GetEncodableHash() []byte {
 		return nil
 	}
 
+	// VerusHash
 	hash := make([]byte, 32)
 	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
-	VerusHash.Anyverushash(string(serializedHeader), len(string(serializedHeader)), ptrHash)
-
+	hashHeader(serializedHeader, ptrHash)
 	return hash
+}
+
+func hashHeader(serializedHeader []byte, ptrHash uintptr) {
+	length := len(serializedHeader)
+	if serializedHeader[0] == 4 && serializedHeader[2] >= 1 {
+		if length < 144 || serializedHeader[143] < 3 {
+			VerusHash.Verushash_v2b(string(serializedHeader), length, ptrHash)
+		} else {
+			if serializedHeader[143] < 4 {
+				VerusHash.Verushash_v2b1(string(serializedHeader), length, ptrHash)
+			} else {
+				VerusHash.Verushash_v2b2(string(serializedHeader), ptrHash)
+			}
+		}
+	} else {
+		VerusHash.Verushash(string(serializedHeader), length, ptrHash)
+	}
+
 }
 
 // GetDisplayPrevHash gets the previous block's hash from this blocks header

@@ -13,10 +13,10 @@ class Verushash {
 public:
   bool initialized = false;
   void initialize();
-  void * verushash(char const * bytes, size_t length);
-  void * verushash_v2(const unsigned char * bytes, size_t length);
-  void * verushash_v2b(const unsigned char * bytes, size_t length);
-  void * verushash_v2b1(const unsigned char * bytes, size_t length);
-  void * verushash_v2b2(const std::string bytes);
+  void verushash(char const * bytes, int length, char * ptrResult);
+  void verushash_v2(const unsigned char * bytes, int length, char * ptrResult);
+  void verushash_v2b(const unsigned char * bytes, int length, char * ptrResult);
+  void verushash_v2b1(std::string bytes, int length, char * ptrResult);
+  void verushash_v2b2(const std::string bytes, char * ptrResult);
 };
 #endif
