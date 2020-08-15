@@ -4,7 +4,7 @@
 package parser
 
 import (
-	"unsafe"
+	"crypto/sha256"
 
 	"github.com/asherda/lightwalletd/parser/internal/bytestring"
 	"github.com/asherda/lightwalletd/walletrpc"
@@ -278,22 +278,25 @@ func (tx *Transaction) GetDisplayHash() []byte {
 		return tx.txId
 	}
 
-	// VerusHash
-	hash := make([]byte, 32)
-	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
-	VerusHash.Anyverushash_reverse(string(tx.rawBytes), len(tx.rawBytes), ptrHash)
-	tx.txId = hash
+	// SHA256d
+	digest := sha256.Sum256(tx.rawBytes)
+	digest = sha256.Sum256(digest[:])
+
+	// Reverse byte order
+	for i := 0; i < len(digest)/2; i++ {
+		j := len(digest) - 1 - i
+		digest[i], digest[j] = digest[j], digest[i]
+	}
+
+	tx.txId = digest[:]
 	return tx.txId
 }
 
 // GetEncodableHash returns the transaction hash in little-endian wire format order.
 func (tx *Transaction) GetEncodableHash() []byte {
-
-	hash := make([]byte, 32)
-	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
-
-	VerusHash.Anyverushash(string(tx.rawBytes), len(tx.rawBytes), ptrHash)
-	return hash
+	digest := sha256.Sum256(tx.rawBytes)
+	digest = sha256.Sum256(digest[:])
+	return digest[:]
 }
 
 func (tx *Transaction) Bytes() []byte {

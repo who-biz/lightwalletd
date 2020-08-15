@@ -24,7 +24,7 @@ void Verushash::initialize() {
 }
 
 
-void Verushash::verushash(const char * bytes, int length, char * ptrResult) {
+void Verushash::verushash(const char * bytes, int length, void * ptrResult) {
     char *result = new char[32];
     
     if (initialized == false) {
@@ -34,7 +34,7 @@ void Verushash::verushash(const char * bytes, int length, char * ptrResult) {
     memcpy(ptrResult, result, 32);
 }
 
-void Verushash::verushash_v2(const unsigned char * bytes, int length, char * ptrResult) {
+void Verushash::verushash_v2(const char * bytes, int length, void * ptrResult) {
     CVerusHashV2 vh2(SOLUTION_VERUSHHASH_V2);
     unsigned char *result = new unsigned char[32];
     
@@ -43,12 +43,12 @@ void Verushash::verushash_v2(const unsigned char * bytes, int length, char * ptr
     }
 
     vh2.Reset();
-    vh2.Write(bytes, length);
+    vh2.Write((unsigned char *) bytes, length);
     vh2.Finalize(result);
     memcpy(ptrResult, result, 32);
 }
 
-void Verushash::verushash_v2b(const unsigned char * bytes, int length, char * ptrResult) {
+void Verushash::verushash_v2b(const char * bytes, int length, void * ptrResult) {
     CVerusHashV2 vh2(SOLUTION_VERUSHHASH_V2);
     unsigned char *result = new unsigned char[32];
     
@@ -57,12 +57,12 @@ void Verushash::verushash_v2b(const unsigned char * bytes, int length, char * pt
     }
 
     vh2.Reset();
-    vh2.Write(bytes, length);
+    vh2.Write((unsigned char *) bytes, length);
     vh2.Finalize2b(result);
     memcpy(ptrResult, result, 32);
 }
 
-void Verushash::verushash_v2b1(std::string const bytes, int length, char * ptrResult) {
+void Verushash::verushash_v2b1(std::string const bytes, int length, void * ptrResult) {
     CVerusHashV2 vh2b1(SOLUTION_VERUSHHASH_V2_1);
     unsigned char *result = new unsigned char[32];
     
@@ -76,7 +76,7 @@ void Verushash::verushash_v2b1(std::string const bytes, int length, char * ptrRe
     memcpy(ptrResult, result, 32);
 }
 
-void Verushash::verushash_v2b2(const std::string bytes, char * ptrResult)
+void Verushash::verushash_v2b2(std::string const bytes, void * ptrResult)
 {
     uint256 result;
 
