@@ -22,11 +22,11 @@ VERSION := `git describe --tags`
 GITCOMMIT := `git rev-parse HEAD`
 BUILDDATE := `date +%Y-%m-%d`
 BUILDUSER := `whoami`
-LDFLAGSSTRING :=-X github.com/zcash/lightwalletd/common.Version=$(VERSION)
-LDFLAGSSTRING +=-X github.com/zcash/lightwalletd/common.GitCommit=$(GITCOMMIT)
-LDFLAGSSTRING +=-X github.com/zcash/lightwalletd/common.Branch=$(BRANCH)
-LDFLAGSSTRING +=-X github.com/zcash/lightwalletd/common.BuildDate=$(BUILDDATE)
-LDFLAGSSTRING +=-X github.com/zcash/lightwalletd/common.BuildUser=$(BUILDUSER)
+LDFLAGSSTRING :=-X github.com/asherda/lightwalletd/common.Version=$(VERSION)
+LDFLAGSSTRING +=-X github.com/asherda/lightwalletd/common.GitCommit=$(GITCOMMIT)
+LDFLAGSSTRING +=-X github.com/asherda/lightwalletd/common.Branch=$(BRANCH)
+LDFLAGSSTRING +=-X github.com/asherda/lightwalletd/common.BuildDate=$(BUILDDATE)
+LDFLAGSSTRING +=-X github.com/asherda/lightwalletd/common.BuildUser=$(BUILDUSER)
 LDFLAGS :=-ldflags "$(LDFLAGSSTRING)"
 
 # There are some files that are generated but are also in source control

@@ -31,7 +31,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/zcash/lightwalletd/walletrpc"
+	pb "github.com/Asherda/lightwalletd/walletrpc"
 	"google.golang.org/grpc"
 )
 
@@ -39,7 +39,7 @@ const (
 	address = "localhost:9067"
 )
 
-// Options variables to hold our command line options
+// Options structure with variables for our command line options
 type Options struct {
 	Concurrency int    `json:"concurrency"`
 	Iterations  int    `json:"iterations"`

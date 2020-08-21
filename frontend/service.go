@@ -17,8 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zcash/lightwalletd/common"
-	"github.com/zcash/lightwalletd/walletrpc"
+	"github.com/Asherda/lightwalletd/common"
+	"github.com/Asherda/lightwalletd/walletrpc"
 )
 
 type lwdStreamer struct {

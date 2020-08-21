@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Asherda/lightwalletd/parser"
+	"github.com/Asherda/lightwalletd/walletrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/zcash/lightwalletd/parser"
-	"github.com/zcash/lightwalletd/walletrpc"
 )
 
 // 'make build' will overwrite this string with the output of git-describe (tag)
@@ -25,25 +25,19 @@ var (
 	BuildUser = ""
 )
 
-// Options variables to store our assorted command line option values
 type Options struct {
-	GRPCBindAddr        string `json:"grpc_bind_address,omitempty"`
-	HTTPBindAddr        string `json:"http_bind_address,omitempty"`
-	TLSCertPath         string `json:"tls_cert_path,omitempty"`
-	TLSKeyPath          string `json:"tls_cert_key,omitempty"`
-	LogLevel            uint64 `json:"log_level,omitempty"`
-	LogFile             string `json:"log_file,omitempty"`
-	ZcashConfPath       string `json:"zcash_conf,omitempty"`
-	RPCUser             string `json:"rpcuser"`
-	RPCPassword         string `json:"rpcpassword"`
-	RPCHost             string `json:"rpchost"`
-	RPCPort             string `json:"rpcport"`
-	NoTLSVeryInsecure   bool   `json:"no_tls_very_insecure,omitempty"`
-	GenCertVeryInsecure bool   `json:"gen_cert_very_insecure,omitempty"`
-	Redownload          bool   `json:"redownload"`
-	DataDir             string `json:"data_dir"`
-	Darkside            bool   `json:"darkside"`
-	DarksideTimeout     uint64 `json:"darkside_timeout"`
+	GRPCBindAddr      string `json:"grpc_bind_address,omitempty"`
+	HTTPBindAddr      string `json:"http_bind_address,omitempty"`
+	TLSCertPath       string `json:"tls_cert_path,omitempty"`
+	TLSKeyPath        string `json:"tls_cert_key,omitempty"`
+	LogLevel          uint64 `json:"log_level,omitempty"`
+	LogFile           string `json:"log_file,omitempty"`
+	VerusdConfPath    string `json:"verusd_conf,omitempty"`
+	ZcashConfPath     string `json:"zcash_conf,omitempty"`
+	NoTLSVeryInsecure bool   `json:"no_tls_very_insecure,omitempty"`
+	Redownload        bool   `json:"redownload"`
+	DataDir           string `json:"data-dir"`
+	Darkside          bool   `json:"darkside"`
 }
 
 // RawRequest points to the function to send a an RPC request to zcashd;
@@ -60,17 +54,14 @@ var Sleep func(d time.Duration)
 var Log *logrus.Entry
 
 type (
-	// Upgradeinfo omit all except ActivationHeight
 	Upgradeinfo struct {
 		// there are other fields that aren't needed here, omit them
 		ActivationHeight int
 	}
-	// ConsensusInfo contains Nextblock and Chaintip
 	ConsensusInfo struct {
 		Nextblock string
 		Chaintip  string
 	}
-	// Blockchaininfo ciontiains chain, an UpgradeInfo map, headers and ConsensInfo
 	Blockchaininfo struct {
 		Chain     string
 		Upgrades  map[string]Upgradeinfo

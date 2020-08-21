@@ -7,12 +7,13 @@ package parser
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/binary"
 	"math/big"
+	"unsafe"
 
+	verushash "github.com/Asherda/Go-VerusHash"
+	"github.com/Asherda/lightwalletd/parser/internal/bytestring"
 	"github.com/pkg/errors"
-	"github.com/zcash/lightwalletd/parser/internal/bytestring"
 )
 
 const (
@@ -66,6 +67,9 @@ type BlockHeader struct {
 	*RawBlockHeader
 	cachedHash []byte
 }
+
+// VerusHash holds the VerusHash object used for the VerusCoin hashing methods
+var VerusHash = verushash.NewVerushash()
 
 // CompactLengthPrefixedLen calculates the total number of bytes needed to
 // encode 'length' bytes.
@@ -126,6 +130,22 @@ func (hdr *RawBlockHeader) MarshalBinary() ([]byte, error) {
 func NewBlockHeader() *BlockHeader {
 	return &BlockHeader{
 		RawBlockHeader: new(RawBlockHeader),
+	}
+}
+
+// BlockHeaderFromParts assembles a blockheader out of the usual inputs
+func BlockHeaderFromParts(version int32, prevhash []byte, merkleroot []byte, saplingroot []byte, time uint32, nbitsbytes []byte, nonce []byte, solution []byte) *BlockHeader {
+	return &BlockHeader{
+		RawBlockHeader: &RawBlockHeader{
+			Version:              version,
+			HashPrevBlock:        prevhash,
+			HashMerkleRoot:       merkleroot,
+			HashFinalSaplingRoot: saplingroot,
+			Time:                 time,
+			NBitsBytes:           nbitsbytes,
+			Nonce:                nonce,
+			Solution:             solution,
+		},
 	}
 }
 
@@ -205,17 +225,15 @@ func (hdr *BlockHeader) GetDisplayHash() []byte {
 		return nil
 	}
 
-	// SHA256d
-	digest := sha256.Sum256(serializedHeader)
-	digest = sha256.Sum256(digest[:])
-
-	// Reverse byte order
-	for i := 0; i < len(digest)/2; i++ {
-		j := len(digest) - 1 - i
-		digest[i], digest[j] = digest[j], digest[i]
+	// VerusHash, reversed order
+	hash := make([]byte, 32)
+	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
+	hashHeader(serializedHeader, ptrHash)
+	reverseHash := make([]byte, 32)
+	for i := 0; i < len(hash); i++ {
+		reverseHash[31-i] = hash[i]
 	}
-
-	hdr.cachedHash = digest[:]
+	hdr.cachedHash = reverseHash
 	return hdr.cachedHash
 }
 
@@ -227,14 +245,32 @@ func (hdr *BlockHeader) GetEncodableHash() []byte {
 		return nil
 	}
 
-	// SHA256d
-	digest := sha256.Sum256(serializedHeader)
-	digest = sha256.Sum256(digest[:])
-
-	return digest[:]
+	// VerusHash
+	hash := make([]byte, 32)
+	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
+	hashHeader(serializedHeader, ptrHash)
+	return hash
 }
 
-// GetDisplayPrevHash returns the block hash in
+func hashHeader(serializedHeader []byte, ptrHash uintptr) {
+	length := len(serializedHeader)
+	if serializedHeader[0] == 4 && serializedHeader[2] >= 1 {
+		if length < 144 || serializedHeader[143] < 3 {
+			VerusHash.Verushash_v2b(string(serializedHeader), length, ptrHash)
+		} else {
+			if serializedHeader[143] < 4 {
+				VerusHash.Verushash_v2b1(string(serializedHeader), length, ptrHash)
+			} else {
+				VerusHash.Verushash_v2b2(string(serializedHeader), ptrHash)
+			}
+		}
+	} else {
+		VerusHash.Verushash(string(serializedHeader), length, ptrHash)
+	}
+
+}
+
+// GetDisplayPrevHash gets the previous block's hash from this blocks header
 func (hdr *BlockHeader) GetDisplayPrevHash() []byte {
 	rhash := make([]byte, len(hdr.HashPrevBlock))
 	copy(rhash, hdr.HashPrevBlock)

@@ -88,6 +88,11 @@ github.com/spf13/pflag
 github.com/spf13/viper
 # github.com/subosito/gotenv v1.2.0
 github.com/subosito/gotenv
+# github.com/zcash/lightwalletd v0.4.2
+github.com/zcash/lightwalletd/common
+github.com/zcash/lightwalletd/parser
+github.com/zcash/lightwalletd/parser/internal/bytestring
+github.com/zcash/lightwalletd/walletrpc
 # golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 golang.org/x/crypto/ripemd160
 # golang.org/x/net v0.0.0-20200813134508-3edf25e44fcc

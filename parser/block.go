@@ -8,9 +8,9 @@ package parser
 import (
 	"fmt"
 
+	"github.com/Asherda/lightwalletd/parser/internal/bytestring"
+	"github.com/Asherda/lightwalletd/walletrpc"
 	"github.com/pkg/errors"
-	"github.com/zcash/lightwalletd/parser/internal/bytestring"
-	"github.com/zcash/lightwalletd/walletrpc"
 )
 
 // Block represents a full block (not a compact block).

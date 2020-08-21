@@ -16,9 +16,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Asherda/lightwalletd/common"
+	"github.com/Asherda/lightwalletd/walletrpc"
 	"github.com/sirupsen/logrus"
-	"github.com/zcash/lightwalletd/common"
-	"github.com/zcash/lightwalletd/walletrpc"
 )
 
 var (

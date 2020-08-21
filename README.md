@@ -1,13 +1,13 @@
-
-[![pipeline status](https://gitlab.com/zcash/lightwalletd/badges/master/pipeline.svg)](https://gitlab.com/zcash/lightwalletd/commits/master)
-[![codecov](https://codecov.io/gh/zcash/lightwalletd/branch/master/graph/badge.svg)](https://codecov.io/gh/zcash/lightwalletd)
-
 # Disclaimer
 This is an alpha build and is currently under active development. Please be advised of the following:
 
 - This code currently is not audited by an external security auditor, use it at your own risk
 - The code **has not been subjected to thorough review** by engineers at the Electric Coin Company
 - We **are actively changing** the codebase and adding features where/when needed
+
+On initial startup lightwalletd starts loading all the blocks starting from block 1. As they are loaded they are added to a disk file, the local cache.
+
+Once all blocks are added, lightwalletd continues waiting for more blocks, adding them as they occur. If lightwalletd is stopped then restrarted, it picks up where it left off usig the disk cache and continues ingesting new blocks as they occur.
 
 🔒 Security Warnings
 
@@ -17,15 +17,11 @@ The Lightwalletd Server is experimental and a work in progress. Use it at your o
 
 # Overview
 
-[lightwalletd](https://github.com/zcash/lightwalletd) is a backend service that provides a bandwidth-efficient interface to the Zcash blockchain. Currently, lightwalletd supports the Sapling protocol version and beyond as its primary concern. The intended purpose of lightwalletd is to support the development and operation of mobile-friendly shielded light wallets.
+[lightwalletd](https://github.com/Asherda/lightwalletd) is a backend service that provides a bandwidth-efficient interface to the VerusCoin blockchain. Currently, lightwalletd supports the Sapling protocol version as its primary concern. The intended purpose of lightwalletd is to support the development of mobile-friendly shielded light wallets.
 
-lightwalletd is a backend service that provides a bandwidth-efficient interface to the Zcash blockchain for mobile and other wallets, such as [Zecwallet](https://github.com/adityapk00/zecwallet-lite-lib).
+The VerusCoin developers ported lightwalletd to the VerusCoin VRSC chain. This version uses verusd rather than zcashd and implements the new VerusCoin hashing algorithms, up to and including V2b2. 
 
 Lightwalletd has not yet undergone audits or been subject to rigorous testing. It lacks some affordances necessary for production-level reliability. We do not recommend using it to handle customer funds at this time (April 2020).
-
-To view status of [CI pipeline](https://gitlab.com/zcash/lightwalletd/pipelines)
-
-To view detailed [Codecov](https://codecov.io/gh/zcash/lightwalletd) report
 
 Documentation for lightwalletd clients (the gRPC interface) is in `docs/rtd/index.html`. The current version of this file corresponds to the two `.proto` files; if you change these files, please regenerate the documentation by running `make doc`, which requires docker to be installed. 
 # Local/Developer docker-compose Usage
@@ -36,7 +32,7 @@ Documentation for lightwalletd clients (the gRPC interface) is in `docs/rtd/inde
 
 ## Zcashd
 
-You must start a local instance of `zcashd`, and its `.zcash/zcash.conf` file must include the following entries
+You must start a local instance of `verusd`, and its `VRSC.conf` file must include the following entries
 (set the user and password strings accordingly):
 ```
 txindex=1
@@ -46,20 +42,24 @@ rpcuser=xxxxx
 rpcpassword=xxxxx
 ```
 
-The `zcashd` can be configured to run `mainnet` or `testnet` (or `regtest`). If you stop `zcashd` and restart it on a different network (switch from `testnet` to `mainnet`, for example), you must also stop and restart lightwalletd.
+verusd can be configured to run `mainnet` or `testnet` (or `regtest`). If you stop `verusd` and restart it on a different network (switch from `testnet` to `mainnet`, for example), you must also stop and restart lightwalletd.
 
-It's necessary to run `zcashd --reindex` one time for these options to take effect. This typically takes several hours, and requires more space in the `.zcash` data directory.
+It's necessary to run `verusd --reindex` one time for these options to take effect. This typically takes several hours, and requires more space in the data directory.
 
-Lightwalletd uses the following `zcashd` RPCs:
+Lightwalletd uses the following `verusd` RPCs:
 - `getblockchaininfo`
 - `getblock`
 - `getrawtransaction`
 - `getaddresstxids`
 - `sendrawtransaction`
 
+We plan on extending it to include identity and token options now that those are available (identity) or becoming available (tokens in may 2020).
 ## Lightwalletd
+Install [Cmake](https://cmake.org/download/)
 
-First, install [Go](https://golang.org/dl/#stable) version 1.11 or later. You can see your current version by running `go version`.
+Install [Boost](https://www.boost.org/)
+
+Install [Go](https://golang.org/dl/#stable) version 1.11 or later. You can see your current version by running `go version`.
 
 Clone the [current repository](https://github.com/zcash/lightwalletd) into a local directory that is _not_ within any component of
 your `$GOPATH` (`$HOME/go` by default), then build the lightwalletd server binary by running `make`.
@@ -69,10 +69,11 @@ your `$GOPATH` (`$HOME/go` by default), then build the lightwalletd server binar
 Assuming you used `make` to build the server, here's a typical developer invocation:
 
 ```
-./lightwalletd --no-tls-very-insecure --zcash-conf-path ~/.zcash/zcash.conf --data-dir . --log-file /dev/stdout
+./lightwalletd --log-file /logs/server.log --grpc-bind-addr 127.0.0.1:18232 --verusd-conf-path VRSC.conf --data-dir .
 ```
 Type `./lightwalletd help` to see the full list of options and arguments.
 
+Note that the --zcash-conf-path option is still listed but it doesn't do anything at the moment.
 # Production Usage
 
 Run a local instance of `zcashd` (see above), except do _not_ specify `--no-tls-very-insecure`.
@@ -107,7 +108,7 @@ certbot certonly --standalone --preferred-challenges http -d some.forward.dns.co
 Example using server binary built from Makefile:
 
 ```
-./lightwalletd --tls-cert cert.pem --tls-key key.pem --zcash-conf-path /home/zcash/.zcash/zcash.conf --log-file /logs/server.log
+./lightwalletd --tls-cert cert.pem --tls-key key.pem --verus-conf-file VRSC.conf --log-file /logs/server.log --grpc-bind-addr 127.0.0.1:18232
 ```
 
 ## Block cache

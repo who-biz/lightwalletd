@@ -15,8 +15,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/Asherda/lightwalletd/walletrpc"
 	"github.com/golang/protobuf/proto"
-	"github.com/zcash/lightwalletd/walletrpc"
 )
 
 // BlockCache contains a consecutive set of recent compact blocks in marshalled form.
@@ -232,7 +232,7 @@ func NewBlockCache(dbPath string, chainName string, startHeight int, redownload 
 			break
 		}
 		length := binary.LittleEndian.Uint32(lengths[i*4 : (i+1)*4])
-		if length < 74 || length > 4*1000*1000 {
+		if length < 76 || length > 4*1000*1000 {
 			Log.Warning("lengths file has impossible value ", length)
 			c.recoverFromCorruption(c.nextBlock)
 			break
@@ -271,7 +271,7 @@ func (c *BlockCache) Add(height int, block *walletrpc.CompactBlock) error {
 	}
 	if height < c.firstBlock {
 		// Should never try to add a block before Sapling activation height
-		Log.Fatal("cache.Add height below Sapling: ", height)
+		Log.Fatal("cache.Add height below block 1: ", height)
 		return nil
 	}
 	if height < c.nextBlock {
@@ -283,7 +283,7 @@ func (c *BlockCache) Add(height int, block *walletrpc.CompactBlock) error {
 
 	// XXX check? TODO COINBASE-HEIGHT: restore this check after coinbase height is fixed
 	if false && bheight != height {
-		// This could only happen if zcashd returned the wrong
+		// This could only happen if verusd returned the wrong
 		// block (not the height we requested).
 		Log.Fatal("cache.Add wrong height: ", bheight, " expecting: ", height)
 		return nil

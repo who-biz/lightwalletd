@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"errors"
+	"github.com/Asherda/lightwalletd/common"
 	"github.com/sirupsen/logrus"
-	"github.com/zcash/lightwalletd/common"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
 )

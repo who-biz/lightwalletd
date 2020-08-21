@@ -22,10 +22,10 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/zcash/lightwalletd/common"
-	"github.com/zcash/lightwalletd/common/logging"
-	"github.com/zcash/lightwalletd/frontend"
-	"github.com/zcash/lightwalletd/walletrpc"
+	"github.com/Asherda/lightwalletd/common"
+	"github.com/Asherda/lightwalletd/common/logging"
+	"github.com/Asherda/lightwalletd/frontend"
+	"github.com/Asherda/lightwalletd/walletrpc"
 )
 
 var cfgFile string
@@ -39,23 +39,18 @@ var rootCmd = &cobra.Command{
          bandwidth-efficient interface to the Zcash blockchain`,
 	Run: func(cmd *cobra.Command, args []string) {
 		opts := &common.Options{
-			GRPCBindAddr:        viper.GetString("grpc-bind-addr"),
-			HTTPBindAddr:        viper.GetString("http-bind-addr"),
-			TLSCertPath:         viper.GetString("tls-cert"),
-			TLSKeyPath:          viper.GetString("tls-key"),
-			LogLevel:            viper.GetUint64("log-level"),
-			LogFile:             viper.GetString("log-file"),
-			ZcashConfPath:       viper.GetString("zcash-conf-path"),
-			RPCUser:             viper.GetString("rpcuser"),
-			RPCPassword:         viper.GetString("rpcpassword"),
-			RPCHost:             viper.GetString("rpchost"),
-			RPCPort:             viper.GetString("rpcport"),
-			NoTLSVeryInsecure:   viper.GetBool("no-tls-very-insecure"),
-			GenCertVeryInsecure: viper.GetBool("gen-cert-very-insecure"),
-			DataDir:             viper.GetString("data-dir"),
-			Redownload:          viper.GetBool("redownload"),
-			Darkside:            viper.GetBool("darkside-very-insecure"),
-			DarksideTimeout:     viper.GetUint64("darkside-timeout"),
+			GRPCBindAddr:      viper.GetString("grpc-bind-addr"),
+			HTTPBindAddr:      viper.GetString("http-bind-addr"),
+			TLSCertPath:       viper.GetString("tls-cert"),
+			TLSKeyPath:        viper.GetString("tls-key"),
+			LogLevel:          viper.GetUint64("log-level"),
+			LogFile:           viper.GetString("log-file"),
+			ZcashConfPath:     viper.GetString("zcash-conf-path"),
+			VerusdConfPath:    viper.GetString("verusd-conf-path"),
+			NoTLSVeryInsecure: viper.GetBool("no-tls-very-insecure"),
+			DataDir:           viper.GetString("data-dir"),
+			Redownload:        viper.GetBool("redownload"),
+			Darkside:          viper.GetBool("darkside-very-insecure"),
 		}
 
 		common.Log.Debugf("Options: %#v\n", opts)
@@ -66,10 +61,10 @@ var rootCmd = &cobra.Command{
 		if !fileExists(opts.LogFile) {
 			os.OpenFile(opts.LogFile, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
 		}
-		if !opts.Darkside && (opts.RPCUser == "" || opts.RPCPassword == "" || opts.RPCHost == "" || opts.RPCPort == "") {
-			filesThatShouldExist = append(filesThatShouldExist, opts.ZcashConfPath)
+		if !opts.Darkside {
+			filesThatShouldExist = append(filesThatShouldExist, opts.VerusdConfPath)
 		}
-		if !opts.NoTLSVeryInsecure && !opts.GenCertVeryInsecure {
+		if !opts.NoTLSVeryInsecure {
 			filesThatShouldExist = append(filesThatShouldExist,
 				opts.TLSCertPath, opts.TLSKeyPath)
 		}
@@ -138,21 +133,15 @@ func startServer(opts *common.Options) error {
 			))
 	} else {
 		var transportCreds credentials.TransportCredentials
-		if opts.GenCertVeryInsecure {
-			common.Log.Warning("Certificate and key not provided, generating self signed values")
-			fmt.Println("Starting insecure self-certificate server")
-			tlsCert := common.GenerateCerts()
-			transportCreds = credentials.NewServerTLSFromCert(tlsCert)
-		} else {
-			var err error
-			transportCreds, err = credentials.NewServerTLSFromFile(opts.TLSCertPath, opts.TLSKeyPath)
-			if err != nil {
-				common.Log.WithFields(logrus.Fields{
-					"cert_file": opts.TLSCertPath,
-					"key_path":  opts.TLSKeyPath,
-					"error":     err,
-				}).Fatal("couldn't load TLS credentials")
-			}
+
+		var err error
+		transportCreds, err = credentials.NewServerTLSFromFile(opts.TLSCertPath, opts.TLSKeyPath)
+		if err != nil {
+			common.Log.WithFields(logrus.Fields{
+				"cert_file": opts.TLSCertPath,
+				"key_path":  opts.TLSKeyPath,
+				"error":     err,
+			}).Fatal("couldn't load TLS credentials")
 		}
 		server = grpc.NewServer(
 			grpc.Creds(transportCreds),
@@ -186,15 +175,11 @@ func startServer(opts *common.Options) error {
 	if opts.Darkside {
 		chainName = "darkside"
 	} else {
-		if opts.RPCUser != "" && opts.RPCPassword != "" && opts.RPCHost != "" && opts.RPCPort != "" {
-			rpcClient, err = frontend.NewZRPCFromFlags(opts)
-		} else {
-			rpcClient, err = frontend.NewZRPCFromConf(opts.ZcashConfPath)
-		}
+		rpcClient, err = frontend.NewVRPCFromConf(opts.VerusdConfPath)
 		if err != nil {
 			common.Log.WithFields(logrus.Fields{
 				"error": err,
-			}).Fatal("setting up RPC connection to zcashd")
+			}).Fatal("setting up RPC connection to verusd")
 		}
 		// Indirect function for test mocking (so unit tests can talk to stub functions).
 		common.RawRequest = rpcClient.RawRequest
@@ -220,12 +205,17 @@ func startServer(opts *common.Options) error {
 		os.Stderr.WriteString(fmt.Sprintf("\n  ** Can't create db directory: %s\n\n", dbPath))
 		os.Exit(1)
 	}
-	cache := common.NewBlockCache(dbPath, chainName, saplingHeight, opts.Redownload)
+	cache := common.NewBlockCache(dbPath, chainName, 1, opts.Redownload)
 	if !opts.Darkside {
 		go common.BlockIngestor(cache, 0 /*loop forever*/)
 	} else {
 		// Darkside wants to control starting the block ingestor.
-		common.DarksideInit(cache, int(opts.DarksideTimeout))
+		// Original code:
+		// common.DarksideInit(cache, int(opts.DarksideTimeout))
+		//
+		// Somewhere in the merges I lost opts.DarksideTimeout, so I'll
+		// just default it to 1 (which is in minutes)
+		common.DarksideInit(cache, 1)
 	}
 
 	// Compact transaction service initialization
@@ -291,17 +281,14 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is current directory, lightwalletd.yaml)")
-	rootCmd.Flags().String("http-bind-addr", "127.0.0.1:9068", "the address to listen for http on")
-	rootCmd.Flags().String("grpc-bind-addr", "127.0.0.1:9067", "the address to listen for grpc on")
+	rootCmd.Flags().String("http-bind-addr", "127.0.0.1:9078", "the address to listen for http on")
+	rootCmd.Flags().String("grpc-bind-addr", "127.0.0.1:9077", "the address to listen for grpc on")
 	rootCmd.Flags().String("tls-cert", "./cert.pem", "the path to a TLS certificate")
 	rootCmd.Flags().String("tls-key", "./cert.key", "the path to a TLS key file")
 	rootCmd.Flags().Int("log-level", int(logrus.InfoLevel), "log level (logrus 1-7)")
 	rootCmd.Flags().String("log-file", "./server.log", "log file to write to")
-	rootCmd.Flags().String("zcash-conf-path", "./zcash.conf", "conf file to pull RPC creds from")
-	rootCmd.Flags().String("rpcuser", "", "RPC user name")
-	rootCmd.Flags().String("rpcpassword", "", "RPC password")
-	rootCmd.Flags().String("rpchost", "", "RPC host")
-	rootCmd.Flags().String("rpcport", "", "RPC host port")
+	rootCmd.Flags().String("verusd-conf-path", "./verusd.conf", "conf file to pull VRSC RPC creds from")
+	rootCmd.Flags().String("zcash-conf-path", "./zcash.conf", "conf file to pull ZCash RPC creds from, not supported as we switch to VRSC")
 	rootCmd.Flags().Bool("no-tls-very-insecure", false, "run without the required TLS certificate, only for debugging, DO NOT use in production")
 	rootCmd.Flags().Bool("gen-cert-very-insecure", false, "run with self-signed TLS certificate, only for debugging, DO NOT use in production")
 	rootCmd.Flags().Bool("redownload", false, "re-fetch all blocks from zcashd; reinitialize local cache files")
@@ -310,9 +297,9 @@ func init() {
 	rootCmd.Flags().Int("darkside-timeout", 30, "override 30 minute default darkside timeout")
 
 	viper.BindPFlag("grpc-bind-addr", rootCmd.Flags().Lookup("grpc-bind-addr"))
-	viper.SetDefault("grpc-bind-addr", "127.0.0.1:9067")
+	viper.SetDefault("grpc-bind-addr", "127.0.0.1:9077")
 	viper.BindPFlag("http-bind-addr", rootCmd.Flags().Lookup("http-bind-addr"))
-	viper.SetDefault("http-bind-addr", "127.0.0.1:9068")
+	viper.SetDefault("http-bind-addr", "127.0.0.1:9078")
 	viper.BindPFlag("tls-cert", rootCmd.Flags().Lookup("tls-cert"))
 	viper.SetDefault("tls-cert", "./cert.pem")
 	viper.BindPFlag("tls-key", rootCmd.Flags().Lookup("tls-key"))
@@ -321,6 +308,8 @@ func init() {
 	viper.SetDefault("log-level", int(logrus.InfoLevel))
 	viper.BindPFlag("log-file", rootCmd.Flags().Lookup("log-file"))
 	viper.SetDefault("log-file", "./server.log")
+	viper.BindPFlag("verusd-conf-path", rootCmd.Flags().Lookup("verusd-conf-path"))
+	viper.SetDefault("verusd-conf-path", "./VRSC.conf")
 	viper.BindPFlag("zcash-conf-path", rootCmd.Flags().Lookup("zcash-conf-path"))
 	viper.SetDefault("zcash-conf-path", "./zcash.conf")
 	viper.BindPFlag("rpcuser", rootCmd.Flags().Lookup("rpcuser"))
