@@ -25,6 +25,7 @@ var (
 	BuildUser = ""
 )
 
+// Options variables to store our assorted command line option values
 type Options struct {
 	GRPCBindAddr        string `json:"grpc_bind_address,omitempty"`
 	HTTPBindAddr        string `json:"http_bind_address,omitempty"`
@@ -59,14 +60,17 @@ var Sleep func(d time.Duration)
 var Log *logrus.Entry
 
 type (
+	// Upgradeinfo omit all except ActivationHeight
 	Upgradeinfo struct {
 		// there are other fields that aren't needed here, omit them
 		ActivationHeight int
 	}
+	// ConsensusInfo contains Nextblock and Chaintip
 	ConsensusInfo struct {
 		Nextblock string
 		Chaintip  string
 	}
+	// Blockchaininfo ciontiains chain, an UpgradeInfo map, headers and ConsensInfo
 	Blockchaininfo struct {
 		Chain     string
 		Upgrades  map[string]Upgradeinfo

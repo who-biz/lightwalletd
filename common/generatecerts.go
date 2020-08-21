@@ -1,4 +1,5 @@
-// Copyright (c) 2019-2020 The Zcash developers
+// Package common Copyright (c) 2019-2020 The Zcash developers
+// Copyright (c) 2020 The VerusHash Developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 package common
