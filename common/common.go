@@ -1,4 +1,5 @@
-// Copyright (c) 2019-2020 The Zcash developers
+// Package Common Copyright (c) 2019-2020 The Zcash developers
+// Copyright (c) 2020 The VerusCoin Developers and David L. Dawes
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -25,6 +26,7 @@ var (
 	BuildUser = ""
 )
 
+// Options variables to store our assorted command line option settings
 type Options struct {
 	GRPCBindAddr      string `json:"grpc_bind_address,omitempty"`
 	HTTPBindAddr      string `json:"http_bind_address,omitempty"`
@@ -54,14 +56,17 @@ var Sleep func(d time.Duration)
 var Log *logrus.Entry
 
 type (
+	// Upgradeinfo ActivationHeight is the only thing kept
 	Upgradeinfo struct {
 		// there are other fields that aren't needed here, omit them
 		ActivationHeight int
 	}
+	// ConsensusInfo contains Nextblock and Chaintip
 	ConsensusInfo struct {
 		Nextblock string
 		Chaintip  string
 	}
+	// Blockchaininfo contains Chain and a map from strings to Upgradeinfo, Headers and ConsensusInfo
 	Blockchaininfo struct {
 		Chain     string
 		Upgrades  map[string]Upgradeinfo
@@ -211,7 +216,7 @@ func BlockIngestor(c *BlockCache, rep int) {
 		if block == nil {
 			// No block at this height.
 			if height == c.GetFirstHeight() {
-				Log.Info("Waiting for zcashd height to reach Sapling activation height ",
+				Log.Info("Waiting for verusd height to reach first requested height (probably a bad sign, we start at 1)",
 					"(", c.GetFirstHeight(), ")...")
 				reorgCount = 0
 				Sleep(20 * time.Second)

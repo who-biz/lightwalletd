@@ -9,25 +9,29 @@ import (
 	"bytes"
 	"encoding/binary"
 	"hash/fnv"
-	"io"
-	"io/ioutil"
-	"os"
-	"path/filepath"
+	"strconv"
 	"sync"
 
 	"github.com/Asherda/lightwalletd/walletrpc"
 	"github.com/golang/protobuf/proto"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
+)
+
+const (
+	blockHeightPrefix = "B"        // key is "B" + block height, value is block; see also H, block by hash
+	blockHashPrefix   = "H"        // key is "H" + block hash, value is block; see also B, block by height
+	idPrefix          = "I"        // key is "I" + chain ID, value is height (more to come), see next (verusID)
+	verusID           = "76b809bb" // so we use I76b809bb as the chain ID, currently it just saves height
 )
 
 // BlockCache contains a consecutive set of recent compact blocks in marshalled form.
 type BlockCache struct {
-	lengthsName, blocksName string // pathnames
-	lengthsFile, blocksFile *os.File
-	starts                  []int64 // Starting offset of each block within blocksFile
-	firstBlock              int     // height of the first block in the cache (usually Sapling activation)
-	nextBlock               int     // height of the first block not in the cache
-	latestHash              []byte  // hash of the most recent (highest height) block, for detecting reorgs.
-	mutex                   sync.RWMutex
+	firstBlock int         // height of the first block in the cache (we start at 1)
+	nextBlock  int         // height of the first block not in the cache
+	latestHash []byte      // hash of the most recent (highest height) block, for detecting reorgs.
+	ldb        *leveldb.DB // levelDB connection
+	mutex      sync.RWMutex
 }
 
 // GetNextHeight returns the height of the lowest unobtained block.
@@ -63,69 +67,26 @@ func (c *BlockCache) HashMismatch(prevhash []byte) bool {
 // In other words, wipe out this height and beyond.
 // This should never increase the size of the cache, only decrease.
 // Caller should hold c.mutex.Lock().
-func (c *BlockCache) setDbFiles(height int) {
+func (c *BlockCache) setDbHeight(height int) {
 	if height <= c.nextBlock {
 		if height < c.firstBlock {
 			height = c.firstBlock
 		}
-		index := height - c.firstBlock
-		if err := c.lengthsFile.Truncate(int64(index * 4)); err != nil {
-			Log.Fatal("truncate lengths file failed: ", err)
-		}
-		if err := c.blocksFile.Truncate(c.starts[index]); err != nil {
-			Log.Fatal("truncate blocks file failed: ", err)
-		}
+		c.flushBlocks(height, c.nextBlock)
 		c.Sync()
-		c.starts = c.starts[:index+1]
 		c.nextBlock = height
 		c.setLatestHash()
 	}
 }
 
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, in)
-	if err != nil {
-		return err
-	}
-	return out.Close()
-}
-
 // Caller should hold c.mutex.Lock().
 func (c *BlockCache) recoverFromCorruption(height int) {
+	c.flushBlocks(height, c.nextBlock)
 	Log.Warning("CORRUPTION detected in db blocks-cache files, height ", height, " redownloading")
-
-	// Save the corrupted files for post-mortem analysis.
-	save := c.lengthsName + "-corrupted"
-	if err := copyFile(c.lengthsName, save); err != nil {
-		Log.Warning("Could not copy db lengths file: ", err)
-	}
-	save = c.blocksName + "-corrupted"
-	if err := copyFile(c.blocksName, save); err != nil {
-		Log.Warning("Could not copy db lengths file: ", err)
-	}
-
-	c.setDbFiles(height)
+	c.setDbHeight(height)
 }
 
-// not including the checksum
-func (c *BlockCache) blockLength(height int) int {
-	index := height - c.firstBlock
-	return int(c.starts[index+1] - c.starts[index] - 8)
-}
-
-// Calculate the 8-byte checksum that precedes each block in the blocks file.
+// Calculate the 8-byte checksum that precedes each block in the blocks records.
 func checksum(height int, b []byte) []byte {
 	h := make([]byte, 8)
 	binary.LittleEndian.PutUint64(h, uint64(height))
@@ -137,30 +98,35 @@ func checksum(height int, b []byte) []byte {
 
 // Caller should hold (at least) c.mutex.RLock().
 func (c *BlockCache) readBlock(height int) *walletrpc.CompactBlock {
-	blockLen := c.blockLength(height)
-	b := make([]byte, blockLen+8)
-	offset := c.starts[height-c.firstBlock]
-	n, err := c.blocksFile.ReadAt(b, offset)
-	if err != nil || n != len(b) {
-		Log.Warning("blocks read offset: ", offset, " failed: ", n, err)
+	if c.ldb == nil {
 		return nil
 	}
-	diskcs := b[:8]
-	b = b[8 : blockLen+8]
+
+	cacheResult, err := c.ldb.Get([]byte(blockHeightPrefix+strconv.Itoa(height)), nil)
+	if err != nil {
+		return nil
+	}
+	if len(cacheResult) < 72 {
+		Log.Warning("block read height: ", height, " failed, result too short. ")
+		return nil
+	}
+
+	diskcs := cacheResult[:8]
+	b := cacheResult[8:]
 	if !bytes.Equal(checksum(height, b), diskcs) {
-		Log.Warning("bad block checksum at height: ", height, " offset: ", offset)
+		Log.Warning("bad block checksum at height: ", height)
 		return nil
 	}
 	block := &walletrpc.CompactBlock{}
 	err = proto.Unmarshal(b, block)
 	if err != nil {
 		// Could be file corruption.
-		Log.Warning("blocks unmarshal at offset: ", offset, " failed: ", err)
+		Log.Warning("blocks unmarshal at height: ", height, " failed: ", err)
 		return nil
 	}
 	if int(block.Height) != height {
 		// Could be file corruption.
-		Log.Warning("block unexpected height at height ", height, " offset: ", offset)
+		Log.Warning("block unexpected height at height ", height)
 		return nil
 	}
 	return block
@@ -184,60 +150,52 @@ func (c *BlockCache) setLatestHash() {
 
 // Reset is used only for darkside testing.
 func (c *BlockCache) Reset(startHeight int) {
-	c.setDbFiles(c.firstBlock) // empty the cache
+	c.setDbHeight(c.firstBlock) // empty the cache
 	c.firstBlock = startHeight
 	c.nextBlock = startHeight
 }
 
 // NewBlockCache returns an instance of a block cache object.
-// (No locking here, we assume this is single-threaded.)
-func NewBlockCache(dbPath string, chainName string, startHeight int, redownload bool) *BlockCache {
+// (No locking here, we assume this is single-threaded. Wait, what?)
+// Currently this is a startup only task, so it is indeed single threaded.
+//
+// Multichain may go to per chain DB, so each cache has a levelDB connection
+// for it's own DB & we can do multiple chains in a single lwd easily.
+func NewBlockCache(db *leveldb.DB, chainName string, startHeight int, redownload bool) *BlockCache {
 	c := &BlockCache{}
+	c.ldb = db
 	c.firstBlock = startHeight
-	c.nextBlock = startHeight
-	c.lengthsName, c.blocksName = dbFileNames(dbPath, chainName)
-	var err error
-	if err := os.MkdirAll(filepath.Join(dbPath, chainName), 0755); err != nil {
-		Log.Fatal("mkdir ", dbPath, " failed: ", err)
-	}
-	c.blocksFile, err = os.OpenFile(c.blocksName, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+
+	// Fetch the cache highwater record for the VerusCOin chain cache
+	// H prefox for height, 76b809bb is the VerusCoin chain main branchID
+	data, err := c.ldb.Get([]byte(idPrefix+"76b809bb"), nil)
 	if err != nil {
-		Log.Fatal("open ", c.blocksName, " failed: ", err)
-	}
-	c.lengthsFile, err = os.OpenFile(c.lengthsName, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
-	if err != nil {
-		Log.Fatal("open ", c.lengthsName, " failed: ", err)
-	}
-	if redownload {
-		if err := c.lengthsFile.Truncate(0); err != nil {
-			Log.Fatal("truncate lengths file failed: ", err)
+		Log.Warning("No max cache height record, starting with no cache", err)
+		c.nextBlock = c.firstBlock
+		if c.storeNewHeight(false) != nil {
+			Log.Fatal("Unable to record new (reset) high water mark: ", c.nextBlock)
 		}
-		if err := c.blocksFile.Truncate(0); err != nil {
-			Log.Fatal("truncate blocks file failed: ", err)
-		}
-	}
-	lengths, err := ioutil.ReadFile(c.lengthsName)
-	if err != nil {
-		Log.Fatal("read ", c.lengthsName, " failed: ", err)
+	} else {
+		c.nextBlock = int(data[0]) | int(data[1])<<8 | int(data[2])<<16 | int(data[3])<<24 |
+			int(data[4])<<32 | int(data[5])<<40 | int(data[6])<<48 | int(data[7])<<56
 	}
 
-	// The last entry in starts[] is where to write the next block.
-	var offset int64
-	c.starts = nil
-	c.starts = append(c.starts, 0)
-	for i := 0; i < len(lengths)/4; i++ {
-		if len(lengths[:4]) < 4 {
-			Log.Warning("lengths file has a partial entry")
-			c.recoverFromCorruption(c.nextBlock)
+	if redownload {
+		c.flushBlocks(1, c.nextBlock)
+	}
+
+	// TODO: Validate checksums switch on CLI?
+	/* skip the index checking stuff, no index managing now
+	for i = c.firstBlock; i < c.nextBlock; i++ {
+
+		// Fetch the next block, make sure things look good
+		// H prefox for height, 76b809bb is the VerusCoin chain main branchID
+		data, err := c.ldb.Get([]byte(blockHeightPrefix + strconv.Itoa(height)), nil)
+		if err != nil {
+			// Log.Warning("Cache miss ", err)
+			c.nextBlock = i
 			break
 		}
-		length := binary.LittleEndian.Uint32(lengths[i*4 : (i+1)*4])
-		if length < 76 || length > 4*1000*1000 {
-			Log.Warning("lengths file has impossible value ", length)
-			c.recoverFromCorruption(c.nextBlock)
-			break
-		}
-		offset += int64(length) + 8
 		c.starts = append(c.starts, offset)
 		// Check for corruption.
 		block := c.readBlock(c.nextBlock)
@@ -249,13 +207,10 @@ func NewBlockCache(dbPath string, chainName string, startHeight int, redownload 
 		c.nextBlock++
 	}
 	c.setDbFiles(c.nextBlock)
+	*/
+
 	Log.Info("Found ", c.nextBlock-c.firstBlock, " blocks in cache")
 	return c
-}
-
-func dbFileNames(dbPath string, chainName string) (string, string) {
-	return filepath.Join(dbPath, chainName, "lengths"),
-		filepath.Join(dbPath, chainName, "blocks")
 }
 
 // Add adds the given block to the cache at the given height, returning true
@@ -289,25 +244,20 @@ func (c *BlockCache) Add(height int, block *walletrpc.CompactBlock) error {
 		return nil
 	}
 
-	// Add the new block and its length to the db files.
+	// Add the new block and its length to the levelDB data.
 	data, err := proto.Marshal(block)
 	if err != nil {
 		return err
 	}
-	_, err = c.blocksFile.Write(append(checksum(height, data), data...))
-	if err != nil {
-		Log.Fatal("blocks write failed: ", err)
-	}
-	b := make([]byte, 4)
-	binary.LittleEndian.PutUint32(b, uint32(len(data)))
-	_, err = c.lengthsFile.Write(b)
-	if err != nil {
-		Log.Fatal("lengths write failed: ", err)
-	}
 
-	// update the in-memory variables
-	offset := c.starts[len(c.starts)-1]
-	c.starts = append(c.starts, offset+int64(len(data)+8))
+	err = c.storeNewBlock(height, data)
+	if err != nil {
+		Log.Fatal("hash write at height", height, "failed: ", err)
+	}
+	err = c.storeNewHeight(false)
+	if err != nil {
+		Log.Fatal("height write with height", height, "failed: ", err)
+	}
 
 	if c.latestHash == nil {
 		c.latestHash = make([]byte, len(block.Hash))
@@ -332,17 +282,12 @@ func (c *BlockCache) Reorg(height int) {
 		// Timing window, ignore this request
 		return
 	}
-	// Remove the end of the cache.
-	c.nextBlock = height
-	newCacheLen := height - c.firstBlock
-	c.starts = c.starts[:newCacheLen+1]
 
-	if err := c.lengthsFile.Truncate(int64(4 * newCacheLen)); err != nil {
-		Log.Fatal("truncate failed: ", err)
-	}
-	if err := c.blocksFile.Truncate(c.starts[newCacheLen]); err != nil {
-		Log.Fatal("truncate failed: ", err)
-	}
+	// Remove the end of the cache.
+	c.flushBlocks(height, c.nextBlock)
+
+	// adjust to the new height
+	c.nextBlock = height
 	c.setLatestHash()
 }
 
@@ -381,19 +326,58 @@ func (c *BlockCache) GetLatestHeight() int {
 
 // Sync ensures that the db files are flushed to disk, can be called unnecessarily.
 func (c *BlockCache) Sync() {
-	c.lengthsFile.Sync()
-	c.blocksFile.Sync()
+	c.storeNewHeight(true)
 }
 
 // Close is Currently used only for testing.
 func (c *BlockCache) Close() {
-	// Some operating system require you to close files before you can remove them.
-	if c.lengthsFile != nil {
-		c.lengthsFile.Close()
-		c.lengthsFile = nil
+	if c.ldb != nil {
+		c.ldb.Close()
 	}
-	if c.blocksFile != nil {
-		c.blocksFile.Close()
-		c.blocksFile = nil
+}
+
+func (c *BlockCache) flushBlocks(height int, last int) {
+	for i := height; i < last; i++ {
+		c.flushBlock(verusID, i)
 	}
+}
+
+func (c *BlockCache) flushBlock(id string, height int) {
+	key := []byte(blockHashPrefix + strconv.Itoa(height))
+	// lets sync these, want deleted items to stay deleted even if we crash
+	err := c.ldb.Delete(key, &opt.WriteOptions{Sync: false})
+	if err != nil {
+		Log.Warning("error flushing block at height: ", err)
+	}
+
+	var hashID []byte = make([]byte, 32)
+	copy(hashID, c.GetLatestHash())
+	hashID = append(hashID, []byte(c.latestHash)...)
+	err = c.ldb.Delete(hashID, &opt.WriteOptions{Sync: false})
+	if err != nil {
+		Log.Warning("flushing block by hash at height: ", err)
+	}
+}
+
+func (c *BlockCache) storeNewHeight(sync bool) error {
+	bytesHeight := make([]byte, 8)
+	binary.LittleEndian.PutUint64(bytesHeight, (uint64)(c.nextBlock&0xFFFFFFFFFFFFFFF))
+	return c.ldb.Put([]byte(idPrefix+"76b809bb"), bytesHeight, &opt.WriteOptions{Sync: sync})
+}
+
+func (c *BlockCache) storeNewBlock(height int, block []byte) error {
+	err := c.ldb.Put([]byte(blockHeightPrefix+strconv.Itoa(height)), block, &opt.WriteOptions{Sync: false})
+	if err != nil {
+		Log.Fatal("blocks write at height", height, "failed: ", err)
+		return err
+	}
+	var hashID []byte = nil
+	copy(hashID, blockHashPrefix)
+	hashID = append(hashID, []byte(c.latestHash)...)
+	err = c.ldb.Put(hashID, block, &opt.WriteOptions{Sync: false})
+	if err != nil {
+		Log.Fatal("hash write at height", height, "failed: ", err)
+		return err
+	}
+	return nil
 }

@@ -1,13 +1,13 @@
 # Disclaimer
-This is an alpha build and is currently under active development. Please be advised of the following:
+This is an experimental build and is currently under active development. Please be advised of the following:
 
 - This code currently is not audited by an external security auditor, use it at your own risk
-- The code **has not been subjected to thorough review** by engineers at the Electric Coin Company
-- We **are actively changing** the codebase and adding features where/when needed
+- The code **has not been subjected to thorough review** by engineers at the Electric Coin Company or anywhere else
+- We **are actively changing** the codebase and adding features where/when needed on multiple forks
 
-On initial startup lightwalletd starts loading all the blocks starting from block 1. As they are loaded they are added to a disk file, the local cache.
+On initial startup lightwalletd starts loading all the blocks starting from block 1. As they are loaded they are added to a levelDB name/value DB store for fast scalable access. Records are stored by block height and by block hash, so blocks can be looked up by either value.
 
-Once all blocks are added, lightwalletd continues waiting for more blocks, adding them as they occur. If lightwalletd is stopped then restrarted, it picks up where it left off usig the disk cache and continues ingesting new blocks as they occur.
+Once all blocks are added, lightwalletd continues waiting for more blocks, adding them as they occur. If lightwalletd is stopped then restrarted, it picks up where it left off using lightwalletd and continues ingesting new blocks as they occur.
 
 🔒 Security Warnings
 
@@ -25,11 +25,40 @@ Lightwalletd has not yet undergone audits or been subject to rigorous testing. I
 
 Documentation for lightwalletd clients (the gRPC interface) is in `docs/rtd/index.html`. The current version of this file corresponds to the two `.proto` files; if you change these files, please regenerate the documentation by running `make doc`, which requires docker to be installed. 
 # Local/Developer docker-compose Usage
+Note: when using docker, map the data directory input via CLI to a location on your file system, so that the data persists even if the containers are destroyed. This avoids reloading everything every time.
 
 [docs/docker-compose-setup.md](./docs/docker-compose-setup.md)
 
 # Local/Developer Usage
+Added leveldb support for storing local chain and tx data, replacing the flat file with simple indexing approach.
 
+## Multichain
+We can put chains into separate DB files (effectively a DB per chain) or we can use a single DB and add a chain indication to the key.
+
+We'll work that out, for now this gets us live on levelDB which, even with multiple writes per record (3: block by height, block by hash, and max height) is almost twice as fast as the flat disk method used before. If speed of ingesting is the sole concern we could dopr the block by hash and height writes, and simply count records to get height, but that's risky/error prone.
+
+We may want to also do a cross chain hashing approach, I'll think about that and add details if so (can't a single block be multichain, so they'd all have the same hash across chains? So we'd need a 2 part key, hash + chainID)
+## LevelDB
+Switching from the simple two file index & serialzed compact data approach to using levelDB via [goleveldb](https://github.com/syndtr/goleveldb.git).
+
+This gives us better performance at large scale, and since our data is relational but quite simple, we can store it in ways that make the details accessible in useful ways. For now we are allowing lookups by block height or block hash. TX hash and so forth would be simple to add, although each additon slows the ingestor down. With 3 writes per block on my dev machine I'm getting about 3K blocks every 4 seconds. The old schem was more like 1.7K.
+
+Additional record writing doesn't affect users of any given key set on the read side, but it allows different sorts of access and does increase total key size, of course.
+### Progress
+To simplify housekeeping, we record the highest block cached in leveldb. On restart this allows us to resume where we left off and avoid rescanning. We check that the new block's prior_hash matches our recorded hash for the last cached block, so if we get a reorg we will notice and rewind and re-cahce the data.
+
+Note that we need to delete all the records previously stored for the block before adding a new one. Since we are single threaded and single process, and there is a single record per key type, this works fine.
+
+We have a utility function to flush ranges of blocks in cache.go called flushBlocks(first int, last int)
+### Schema
+We ingest the blockchain data and store the results. A siplified view of the result:
+An array of blocks
+- Each block is serialized into a single []byte array called a compactBlock
+- The block contains block details and an array of TXs, each of which is a compactTX. Each TX contains arrays of spends and outputs; all are serialzied into a single array.
+- When storing the block, we save it under Bnnnnnnnn where nnnnnnnn is the block height and under Hhhhh... (32 characters)..hhh, where the 32 h characters are the actual hash value for the block.
+- When we store a new "latestBlock" we store the height under the key Icccccccc where cccccccc is the chainID.
+#### Note on Hashes
+We store a second copy of each block using the blockhash (with unique preamble) as the key. We could do the same with every TX, storing a second copy of it w/hash + prefix as the key, if we ever want to allow looking up TX by hash. This has NOT been implemented, just a thought.
 ## Zcashd
 
 You must start a local instance of `verusd`, and its `VRSC.conf` file must include the following entries
@@ -126,7 +155,7 @@ the `--data-dir` command-line option).
 Lightwalletd checks the consistency of these files at startup and during
 operation as these files may be damaged by, for example, an unclean shutdown.
 If the server detects corruption, it will automatically re-downloading blocks
-from `zcashd` from that height, requiring up to an hour again (no manual
+from `verusd` from that height, requiring up to an hour again (no manual
 intervention is required). But this should occur rarely.
 
 If lightwalletd detects corruption in these cache files, it will log
