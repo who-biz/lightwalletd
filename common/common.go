@@ -211,7 +211,7 @@ func BlockIngestor(c *BlockCache, rep int) {
 		if block == nil {
 			// No block at this height.
 			if height == c.GetFirstHeight() {
-				Log.Info("Waiting for zcashd height to reach Sapling activation height ",
+				Log.Info("Waiting for verusd height to reach first requested height (probably a bad sign, we start at 1)",
 					"(", c.GetFirstHeight(), ")...")
 				reorgCount = 0
 				Sleep(20 * time.Second)

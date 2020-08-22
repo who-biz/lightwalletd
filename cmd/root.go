@@ -11,6 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Asherda/lightwalletd/common"
+	"github.com/Asherda/lightwalletd/common/logging"
+	"github.com/Asherda/lightwalletd/frontend"
+	"github.com/Asherda/lightwalletd/walletrpc"
 	"github.com/btcsuite/btcd/rpcclient"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -18,14 +22,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/syndtr/goleveldb/leveldb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
-
-	"github.com/Asherda/lightwalletd/common"
-	"github.com/Asherda/lightwalletd/common/logging"
-	"github.com/Asherda/lightwalletd/frontend"
-	"github.com/Asherda/lightwalletd/walletrpc"
 )
 
 var cfgFile string
@@ -205,7 +205,11 @@ func startServer(opts *common.Options) error {
 		os.Stderr.WriteString(fmt.Sprintf("\n  ** Can't create db directory: %s\n\n", dbPath))
 		os.Exit(1)
 	}
-	cache := common.NewBlockCache(dbPath, chainName, 1, opts.Redownload)
+	// leveldb instances are safe for concurrent use.
+	db, err := leveldb.OpenFile(dbPath, nil)
+	defer db.Close()
+
+	cache := common.NewBlockCache(db, chainName, 1, opts.Redownload)
 	if !opts.Darkside {
 		go common.BlockIngestor(cache, 0 /*loop forever*/)
 	} else {
