@@ -74,6 +74,7 @@ func (c *BlockCache) setDbHeight(height int) {
 		}
 		c.flushBlocks(height, c.nextBlock)
 		c.Sync()
+		c.storeNewHeight(true)
 		c.nextBlock = height
 		c.setLatestHash()
 	}
@@ -192,7 +193,6 @@ func NewBlockCache(db *leveldb.DB, chainName string, startHeight int, redownload
 			c.recoverFromCorruption(c.nextBlock)
 			break
 		}
-		c.nextBlock++
 	}
 
 	Log.Info("Found ", c.nextBlock-c.firstBlock, " blocks in cache")
