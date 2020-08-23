@@ -289,6 +289,23 @@ func TestBlockIngestor(t *testing.T) {
 	step = 0
 	sleepCount = 0
 	sleepDuration = 0
+	testcache.setDbHeight(380642)
+	if testcache.GetNextHeight() != 380642 {
+		t.Error("unable to reset height back to 280642")
+	}
+	cBlock := testcache.Get(380642)
+	if cBlock != nil {
+		t.Error("found a block at 380642 but we set DB height below that so it should have been flushed")
+	}
+	cBlock = testcache.Get(380641)
+	if cBlock == nil {
+		t.Error("failed to find a block at 280641, we reset the DB height to 1 higher so it should still be thre")
+	}
+	cBlock = testcache.Get(380640)
+	if cBlock == nil {
+		t.Error("failed to find a block at 280640, we reset the DB height to 2 higher so it should still be thre")
+	}
+
 	os.RemoveAll(unitTestPath)
 }
 

@@ -153,7 +153,7 @@ ok  	github.com/Asherda/lightwalletd/walletrpc	(cached)
 
 ```
 ## Code Coverage
-If you want to measure unit test coverage of the cpde run this go test command from the project's root diretory:
+If you want to measure unit test coverage of the code run this go test command from the project's root diretory:
 ```
 ~/levelDB/lightwalletd$ go test $(go list ./...) -coverprofile coverage.out
 # github.com/Asherda/Go-VerusHash
