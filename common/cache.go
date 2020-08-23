@@ -341,6 +341,8 @@ func (c *BlockCache) flushBlocks(height int, last int) {
 	for i := height; i < last; i++ {
 		c.flushBlock(verusID, i)
 	}
+	c.nextBlock = height
+	c.storeNewHeight(true)
 }
 
 func (c *BlockCache) flushBlock(id string, height int) {
@@ -351,12 +353,14 @@ func (c *BlockCache) flushBlock(id string, height int) {
 		Log.Warning("error flushing block at height: ", err)
 	}
 
-	var hashID []byte = make([]byte, 33)
-	copy(hashID, []byte(blockHashPrefix))
-	hashID = append(hashID, []byte(c.latestHash)...)
-	err = c.ldb.Delete(hashID, &opt.WriteOptions{Sync: false})
-	if err != nil {
-		Log.Warning("flushing block by hash at height: ", err)
+	if c.latestHash != nil {
+		var hashID []byte = make([]byte, 33)
+		copy(hashID, []byte(blockHashPrefix))
+		hashID = append(hashID, []byte(c.latestHash)...)
+		err = c.ldb.Delete(hashID, &opt.WriteOptions{Sync: false})
+		if err != nil {
+			Log.Warning("flushing block by hash at height: ", err)
+		}
 	}
 }
 
