@@ -1,13 +1,13 @@
 # Disclaimer
-This is an alpha build and is currently under active development. Please be advised of the following:
+This is an experimental build and is currently under active development. Please be advised of the following:
 
 - This code currently is not audited by an external security auditor, use it at your own risk
-- The code **has not been subjected to thorough review** by engineers at the Electric Coin Company
-- We **are actively changing** the codebase and adding features where/when needed
+- The code **has not been subjected to thorough review** by engineers at the Electric Coin Company or anywhere else
+- We **are actively changing** the codebase and adding features where/when needed on multiple forks
 
-On initial startup lightwalletd starts loading all the blocks starting from block 1. As they are loaded they are added to a disk file, the local cache.
+On initial startup lightwalletd starts loading all the blocks starting from block 1. As they are loaded they are added to a levelDB name/value DB store for fast scalable access. Records are stored by block height and by block hash, so blocks can be looked up by either value.
 
-Once all blocks are added, lightwalletd continues waiting for more blocks, adding them as they occur. If lightwalletd is stopped then restrarted, it picks up where it left off usig the disk cache and continues ingesting new blocks as they occur.
+Once all blocks are added, lightwalletd continues waiting for more blocks, adding them as they occur. If lightwalletd is stopped then restrarted, it picks up where it left off using lightwalletd and continues ingesting new blocks as they occur.
 
 🔒 Security Warnings
 
@@ -25,12 +25,96 @@ Lightwalletd has not yet undergone audits or been subject to rigorous testing. I
 
 Documentation for lightwalletd clients (the gRPC interface) is in `docs/rtd/index.html`. The current version of this file corresponds to the two `.proto` files; if you change these files, please regenerate the documentation by running `make doc`, which requires docker to be installed. 
 # Local/Developer docker-compose Usage
+Note: when using docker, map the data directory input via CLI to a location on your file system, so that the data persists even if the containers are destroyed. This avoids reloading everything every time.
 
 [docs/docker-compose-setup.md](./docs/docker-compose-setup.md)
 
 # Local/Developer Usage
+Added leveldb support for storing local chain and tx data, replacing the flat file with simple indexing approach. It's included automatically and uses the normal command line options so no change should be needed, existing configurations will continue working.
 
-## Zcashd
+## Testing
+Fixed the unit tests so they all pass. Removed a couple but mostly got them repaired.
+
+Simply run make test to run all the tests:
+```
+~/levelDB/lightwalletd$ make test
+go test -v ./...
+# github.com/Asherda/Go-VerusHash
+verushash.cxx: In member function ‘void Verushash::initialize()’:
+verushash.cxx:21:20: warning: ignoring return value of ‘int sodium_init()’, declared with attribute warn_unused_result [-Wunused-result]
+         sodium_init();
+         ~~~~~~~~~~~^~
+=== RUN   TestHashV2b2
+Got the correct v2b2 hash for block 1053660
+Got the correct v2b2 hash for block 1053661!
+--- PASS: TestHashV2b2 (0.00s)
+
+<deleted lots of passing test results>
+
+=== RUN   TestString_read
+--- PASS: TestString_read (0.00s)
+PASS
+ok  	github.com/Asherda/lightwalletd/walletrpc	(cached)
+
+```
+## Code Coverage
+If you want to measure unit test coverage of the code run this go test command from the project's root diretory:
+```
+~/levelDB/lightwalletd$ go test $(go list ./...) -coverprofile coverage.out
+# github.com/Asherda/Go-VerusHash
+verushash.cxx: In member function ‘void Verushash::initialize()’:
+verushash.cxx:21:20: warning: ignoring return value of ‘int sodium_init()’, declared with attribute warn_unused_result [-Wunused-result]
+         sodium_init();
+         ~~~~~~~~~~~^~
+ok  	github.com/Asherda/lightwalletd	0.007s	coverage: 0.0% of statements
+ok  	github.com/Asherda/lightwalletd/cmd	0.008s	coverage: 34.1% of statements
+ok  	github.com/Asherda/lightwalletd/common	11.213s	coverage: 40.4% of statements
+ok  	github.com/Asherda/lightwalletd/common/logging	0.006s	coverage: 91.7% of statements
+ok  	github.com/Asherda/lightwalletd/frontend	14.693s	coverage: 49.5% of statements
+ok  	github.com/Asherda/lightwalletd/parser	0.520s	coverage: 94.6% of statements
+ok  	github.com/Asherda/lightwalletd/parser/internal/bytestring	0.003s	coverage: 100.0% of statements
+?   	github.com/Asherda/lightwalletd/testclient	[no test files]
+?   	github.com/Asherda/lightwalletd/testtools/genblocks	[no test files]
+?   	github.com/Asherda/lightwalletd/testtools/zap	[no test files]
+ok  	github.com/Asherda/lightwalletd/walletrpc	0.014s	coverage: 3.1% of statements
+```
+Once that runs you can take a look at coverage while viewing the source code by running:
+```
+go tool cover -html=coverage.out
+```
+## Multichain
+We can put chains into separate DB files (effectively a DB per chain) or we can use a single DB and add a chain indication to the key.
+
+We'll work that out, for now this gets us live on levelDB which, even with two writes per record (block by height and max height) is about three times as fast as the prior flat file method.
+## LevelDB
+Switching from the simple two file index & serialzed compact data approach to using levelDB via [goleveldb](https://github.com/syndtr/goleveldb.git).
+
+This gives us better performance at large scale. We support looking blocks up by block height. With 2 writes per block on my dev machine I'm getting about 5.6K blocks every 4 seconds. The old schem was more like 1.7K.
+### Progress - Max Block Height
+To simplify housekeeping, we record the highest block cached in leveldb. On restart this allows us to resume where we left off and avoid rescanning. We check that the new block's prior_hash matches our recorded hash for the last cached block, so if we get a reorg we will notice and rewind and re-cache the data.
+
+### Corruption Check
+Every block record is prepended by an 8 byte checksum for the block that is calculated when we store it. Each time we get a value we redo the checksum to ensure nothing has been corrupted.
+### Validation, Reorg and --redownload
+Each time we load we scan through the DB to make sure all the block records are present and the compactBlock checksums are correct. If something is not correct we will fix the corruption, or at least try to. The current test suite does not clean u p after itself completely, and creates records at height 2.3m or something like that. After running the tests successfully, when I ran a normal lightwalletd pass it complained abou corruption and worked backward from 2.3M or so all the way down ti 1.15M where the real current records are, then continued from there. I'll take a look at fixing the tests, but for now they have that side effect. They also gave me a good solid test of the "recover from corruption" code and it works fine.
+
+Once the levelDB records have been validated, as each new block shows up we compare it's prevHash field to the has we calculated for the prior block. If they do not match we assume we hit a chain reorg and rewind, getting the prior blocks, checking the hashes and rewinding up to 100 blocks before giving up. Any typical fork will be resolved within a much smaller number of blocks so this is pretty reasonable.
+
+The key value store is idempotent, so as soon as we write a new value for a given height the old one is gone. There's the usual small risk of data loss due to failures since we do not sync on writes, but the system notices corrupted blocks and hash mismatches and automatically corrects for them, so it's pretty resilient.
+
+Reorgs work on the most recent blocks, no more than 100 of them, presumably due to forks. If you want to simply flush the levelDB data, use the --redownload flag.
+
+The --redownload flag on the command line makes lightwalletd flush the levelDB and reload from scratch. Note that we need to delete all the records previously stored for the block before adding a new one. Since we are single threaded and single process, and there is a single record per key type, this works fine. It takes about 8 seconds to delete them all on the current VerusCoin chain, wkich has a bit over 1M records in August 2020.
+
+We have a utility function in the code to flush ranges of blocks in cache.go called flushBlocks(first int, last int)
+### Schema
+We ingest the blockchain data and store the results. A siplified view of the result:
+An array of blocks
+- Each block is serialized into a single []byte array called a compactBlock
+- The block contains block details and an array of TXs, each of which is a compactTX. Each TX contains arrays of spends and outputs; all are serialzied into a single array.
+- When storing the block, we save it under Bnnnnnnnn where nnnnnnnn is the block height.
+- When we store a new "latestBlock" we store the height under the key Icccccccc where cccccccc is the chainID.
+## Verusd
 
 You must start a local instance of `verusd`, and its `VRSC.conf` file must include the following entries
 (set the user and password strings accordingly):
@@ -126,7 +210,7 @@ the `--data-dir` command-line option).
 Lightwalletd checks the consistency of these files at startup and during
 operation as these files may be damaged by, for example, an unclean shutdown.
 If the server detects corruption, it will automatically re-downloading blocks
-from `zcashd` from that height, requiring up to an hour again (no manual
+from `verusd` from that height, requiring up to an hour again (no manual
 intervention is required). But this should occur rarely.
 
 If lightwalletd detects corruption in these cache files, it will log
@@ -142,8 +226,15 @@ docs](docs/darksidewalletd.md) for more information.
 # Pull Requests
 
 We welcome pull requests! We like to keep our Go code neatly formatted in a standard way,
-which the standard tool [gofmt](https://golang.org/cmd/gofmt/) can do. Please consider
-adding the following to the file `.git/hooks/pre-commit` in your clone:
+which the standard tool [gofmt](https://golang.org/cmd/gofmt/) can do. Also, run golint
+prior to checkin and keep things clean.
+
+Our current PR template asks for a design document link from the PR description and a
+test plan added as a comment. If no design is needed (i.e. a README update or depenency
+version update) then don't check off the box, explain the exception. Ditto the test plan.
+
+ Please consider adding the following to the
+file `.git/hooks/pre-commit` in your clone:
 
 ```
 #!/bin/sh

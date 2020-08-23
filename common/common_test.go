@@ -17,6 +17,7 @@ import (
 	"github.com/Asherda/lightwalletd/walletrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 // ------------------------------------------ Setup
@@ -38,6 +39,8 @@ var (
 	blocks [][]byte // four test blocks
 )
 
+var db *leveldb.DB = nil
+
 // TestMain does common setup that's shared across multiple tests
 func TestMain(m *testing.M) {
 	output, err := os.OpenFile("test-log", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
@@ -49,6 +52,13 @@ func TestMain(m *testing.M) {
 	Log = logger.WithFields(logrus.Fields{
 		"app": "test",
 	})
+
+	// leveldb instances are safe for concurrent use.
+	db, err = leveldb.OpenFile(unitTestPath, nil)
+	if err != nil {
+		os.Stderr.WriteString(fmt.Sprintf("Cannot open unitTestPath: %s, error: %v", unitTestPath, err))
+		os.Exit(1)
+	}
 
 	getsaplinginfo, err := ioutil.ReadFile("../testdata/getsaplinginfo")
 	if err != nil {
@@ -266,7 +276,12 @@ func TestBlockIngestor(t *testing.T) {
 	RawRequest = getblockStub
 	Sleep = sleepStub
 	os.RemoveAll(unitTestPath)
-	testcache := NewBlockCache(unitTestPath, unitTestChain, 380640, false)
+	testcache := NewBlockCache(db, unitTestChain, 380640, false)
+	testcache.latestHash = make([]byte, 32)
+	_, err := hex.Decode(testcache.latestHash, []byte("8a024cebb99e30ff83d5b9f50cc5303351923da95a8dc7fda3e0160900000000"))
+	if err != nil {
+		t.Error("failed todecode latestHash value successfully")
+	}
 	BlockIngestor(testcache, 11)
 	if step != 11 {
 		t.Error("unexpected final step", step)
@@ -274,6 +289,23 @@ func TestBlockIngestor(t *testing.T) {
 	step = 0
 	sleepCount = 0
 	sleepDuration = 0
+	testcache.setDbHeight(380642)
+	if testcache.GetNextHeight() != 380642 {
+		t.Error("unable to reset height back to 280642")
+	}
+	cBlock := testcache.Get(380642)
+	if cBlock != nil {
+		t.Error("found a block at 380642 but we set DB height below that so it should have been flushed")
+	}
+	cBlock = testcache.Get(380641)
+	if cBlock == nil {
+		t.Error("failed to find a block at 280641, we reset the DB height to 1 higher so it should still be thre")
+	}
+	cBlock = testcache.Get(380640)
+	if cBlock == nil {
+		t.Error("failed to find a block at 280640, we reset the DB height to 2 higher so it should still be thre")
+	}
+
 	os.RemoveAll(unitTestPath)
 }
 
@@ -281,7 +313,7 @@ func TestGetBlockRange(t *testing.T) {
 	testT = t
 	RawRequest = getblockStub
 	os.RemoveAll(unitTestPath)
-	testcache := NewBlockCache(unitTestPath, unitTestChain, 380640, true)
+	testcache := NewBlockCache(db, unitTestChain, 380640, true)
 	blockChan := make(chan *walletrpc.CompactBlock)
 	errChan := make(chan error)
 	go GetBlockRange(testcache, blockChan, errChan, 380640, 380642)
@@ -306,17 +338,6 @@ func TestGetBlockRange(t *testing.T) {
 		if cBlock.Height != 380641 {
 			t.Fatal("unexpected Height:", cBlock.Height)
 		}
-	}
-
-	// try to read in block 380642, but this will fail (see case 3 above)
-	select {
-	case err := <-errChan:
-		// this will also catch context.DeadlineExceeded from the timeout
-		if err.Error() != "block requested is newer than latest block" {
-			t.Fatal("unexpected error:", err)
-		}
-	case _ = <-blockChan:
-		t.Fatal("reading height 22 should have failed")
 	}
 
 	// check goroutine GetBlockRange() reaching the end of the range (and exiting)
