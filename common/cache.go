@@ -181,7 +181,7 @@ func NewBlockCache(db *leveldb.DB, chainName string, startHeight int, redownload
 	}
 
 	if redownload {
-		c.flushBlocks(1, c.nextBlock)
+		c.flushBlocks(c.firstBlock, c.nextBlock)
 	}
 
 	// TODO: Validate checksums switch on CLI?
