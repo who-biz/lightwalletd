@@ -1,3 +1,5 @@
+# github.com/asherda/go-verushash v0.0.0-20200826043445-bbbaa481fb00
+github.com/asherda/go-verushash
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
 # github.com/btcsuite/btcd v0.20.1-beta

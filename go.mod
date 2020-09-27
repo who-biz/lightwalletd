@@ -3,6 +3,7 @@ module github.com/asherda/lightwalletd
 go 1.12
 
 require (
+	github.com/asherda/go-verushash v0.0.0-20200826043445-bbbaa481fb00
 	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/golang/protobuf v1.4.1
 	github.com/gopherjs/gopherjs v0.0.0-20191106031601-ce3c9ade29de // indirect

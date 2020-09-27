@@ -7,10 +7,11 @@ package parser
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/binary"
 	"math/big"
+	"unsafe"
 
+	"github.com/asherda/go-verushash"
 	"github.com/asherda/lightwalletd/parser/internal/bytestring"
 	"github.com/pkg/errors"
 )
@@ -19,6 +20,9 @@ const (
 	serBlockHeaderMinusEquihashSize = 140  // size of a serialized block header minus the Equihash solution
 	equihashSizeMainnet             = 1344 // size of a mainnet / testnet Equihash solution in bytes
 )
+
+// Initialize verushash object once.
+var verusHash = verushash.NewVerushash()
 
 // RawBlockHeader implements the block header as defined in version
 // 2018.0-beta-29 of the Zcash Protocol Spec.
@@ -206,11 +210,16 @@ func (hdr *BlockHeader) GetDisplayHash() []byte {
 	}
 
 	// SHA256d
-	digest := sha256.Sum256(serializedHeader)
-	digest = sha256.Sum256(digest[:])
+	//digest := sha256.Sum256(serializedHeader)
+	//digest = sha256.Sum256(digest[:])
 
+	// VerusHash
+
+	hash := make([]byte, 32)
+	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
+	hashHeader(serializedHeader, ptrHash)
 	// Convert to big-endian
-	hdr.cachedHash = Reverse(digest[:])
+	hdr.cachedHash = Reverse(hash)
 	return hdr.cachedHash
 }
 
@@ -223,13 +232,34 @@ func (hdr *BlockHeader) GetEncodableHash() []byte {
 	}
 
 	// SHA256d
-	digest := sha256.Sum256(serializedHeader)
-	digest = sha256.Sum256(digest[:])
+	//digest := sha256.Sum256(serializedHeader)
+	//digest = sha256.Sum256(digest[:])
 
-	return digest[:]
+	// Verushash
+	hash := make([]byte, 32)
+	ptrHash := uintptr(unsafe.Pointer(&hash[0]))
+	hashHeader(serializedHeader, ptrHash)
+	return hash
 }
 
 // GetDisplayPrevHash returns the block hash in big-endian order.
 func (hdr *BlockHeader) GetDisplayPrevHash() []byte {
 	return Reverse(hdr.HashPrevBlock)
+}
+
+func hashHeader(serializedHeader []byte, ptrHash uintptr) {
+	length := len(serializedHeader)
+	if serializedHeader[0] == 4 && serializedHeader[2] >= 1 {
+		if length < 144 || serializedHeader[143] < 3 {
+			verusHash.Verushash_v2b(string(serializedHeader), length, ptrHash)
+		} else {
+			if serializedHeader[143] < 4 {
+				verusHash.Verushash_v2b1(string(serializedHeader), length, ptrHash)
+			} else {
+				verusHash.Verushash_v2b2(string(serializedHeader), ptrHash)
+			}
+		}
+	} else {
+		verusHash.Verushash(string(serializedHeader), length, ptrHash)
+	}
 }
