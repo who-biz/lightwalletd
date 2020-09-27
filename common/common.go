@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/asherda/lightwalletd/parser"
+	"github.com/asherda/lightwalletd/walletrpc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/zcash/lightwalletd/parser"
-	"github.com/zcash/lightwalletd/walletrpc"
 )
 
 // 'make build' will overwrite this string with the output of git-describe (tag)
@@ -32,7 +32,7 @@ type Options struct {
 	TLSKeyPath          string `json:"tls_cert_key,omitempty"`
 	LogLevel            uint64 `json:"log_level,omitempty"`
 	LogFile             string `json:"log_file,omitempty"`
-	ZcashConfPath       string `json:"zcash_conf,omitempty"`
+	VerusConfPath       string `json:"zcash_conf,omitempty"`
 	RPCUser             string `json:"rpcuser"`
 	RPCPassword         string `json:"rpcpassword"`
 	RPCHost             string `json:"rpchost"`

@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zcash/lightwalletd/parser"
+	"github.com/asherda/lightwalletd/parser"
 )
 
 type darksideState struct {

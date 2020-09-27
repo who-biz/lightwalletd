@@ -18,7 +18,7 @@ limitations of light wallets that use Lightwalletd.
 
 # Overview
 
-[lightwalletd](https://github.com/zcash/lightwalletd) is a backend service that provides a bandwidth-efficient interface to the Zcash blockchain. Currently, lightwalletd supports the Sapling protocol version and beyond as its primary concern. The intended purpose of lightwalletd is to support the development and operation of mobile-friendly shielded light wallets.
+[lightwalletd](https://github.com/asherda/lightwalletd) is a backend service that provides a bandwidth-efficient interface to the Zcash blockchain. Currently, lightwalletd supports the Sapling protocol version and beyond as its primary concern. The intended purpose of lightwalletd is to support the development and operation of mobile-friendly shielded light wallets.
 
 lightwalletd is a backend service that provides a bandwidth-efficient interface to the Zcash blockchain for mobile and other wallets, such as [Zecwallet](https://github.com/adityapk00/zecwallet-lite-lib).
 
@@ -60,7 +60,7 @@ Lightwalletd uses the following `zcashd` RPCs:
 
 First, install [Go](https://golang.org/dl/#stable) version 1.11 or later. You can see your current version by running `go version`.
 
-Clone the [current repository](https://github.com/zcash/lightwalletd) into a local directory that is _not_ within any component of
+Clone the [current repository](https://github.com/asherda/lightwalletd) into a local directory that is _not_ within any component of
 your `$GOPATH` (`$HOME/go` by default), then build the lightwalletd server binary by running `make`.
 
 ## To run SERVER
@@ -68,7 +68,7 @@ your `$GOPATH` (`$HOME/go` by default), then build the lightwalletd server binar
 Assuming you used `make` to build the server, here's a typical developer invocation:
 
 ```
-./lightwalletd --no-tls-very-insecure --zcash-conf-path ~/.zcash/zcash.conf --data-dir . --log-file /dev/stdout
+./lightwalletd --no-tls-very-insecure --verus-conf-path ~/.komodo/VRSC/VRSC.conf --data-dir . --log-file /dev/stdout
 ```
 Type `./lightwalletd help` to see the full list of options and arguments.
 
@@ -106,7 +106,7 @@ certbot certonly --standalone --preferred-challenges http -d some.forward.dns.co
 Example using server binary built from Makefile:
 
 ```
-./lightwalletd --tls-cert cert.pem --tls-key key.pem --zcash-conf-path /home/zcash/.zcash/zcash.conf --log-file /logs/server.log
+./lightwalletd --tls-cert cert.pem --tls-key key.pem --verus-conf-path "/home/$USER/.komodo/VRSC.conf" --log-file /logs/server.log
 ```
 
 ## Block cache

@@ -22,10 +22,10 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/zcash/lightwalletd/common"
-	"github.com/zcash/lightwalletd/common/logging"
-	"github.com/zcash/lightwalletd/frontend"
-	"github.com/zcash/lightwalletd/walletrpc"
+	"github.com/asherda/lightwalletd/common"
+	"github.com/asherda/lightwalletd/common/logging"
+	"github.com/asherda/lightwalletd/frontend"
+	"github.com/asherda/lightwalletd/walletrpc"
 )
 
 var cfgFile string
@@ -45,7 +45,7 @@ var rootCmd = &cobra.Command{
 			TLSKeyPath:          viper.GetString("tls-key"),
 			LogLevel:            viper.GetUint64("log-level"),
 			LogFile:             viper.GetString("log-file"),
-			ZcashConfPath:       viper.GetString("zcash-conf-path"),
+			VerusConfPath:       viper.GetString("verus-conf-path"),
 			RPCUser:             viper.GetString("rpcuser"),
 			RPCPassword:         viper.GetString("rpcpassword"),
 			RPCHost:             viper.GetString("rpchost"),
@@ -67,7 +67,7 @@ var rootCmd = &cobra.Command{
 			os.OpenFile(opts.LogFile, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
 		}
 		if !opts.Darkside && (opts.RPCUser == "" || opts.RPCPassword == "" || opts.RPCHost == "" || opts.RPCPort == "") {
-			filesThatShouldExist = append(filesThatShouldExist, opts.ZcashConfPath)
+			filesThatShouldExist = append(filesThatShouldExist, opts.VerusConfPath)
 		}
 		if !opts.NoTLSVeryInsecure && !opts.GenCertVeryInsecure {
 			filesThatShouldExist = append(filesThatShouldExist,
@@ -189,7 +189,7 @@ func startServer(opts *common.Options) error {
 		if opts.RPCUser != "" && opts.RPCPassword != "" && opts.RPCHost != "" && opts.RPCPort != "" {
 			rpcClient, err = frontend.NewZRPCFromFlags(opts)
 		} else {
-			rpcClient, err = frontend.NewZRPCFromConf(opts.ZcashConfPath)
+			rpcClient, err = frontend.NewZRPCFromConf(opts.VerusConfPath)
 		}
 		if err != nil {
 			common.Log.WithFields(logrus.Fields{
@@ -291,13 +291,13 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is current directory, lightwalletd.yaml)")
-	rootCmd.Flags().String("http-bind-addr", "127.0.0.1:9068", "the address to listen for http on")
-	rootCmd.Flags().String("grpc-bind-addr", "127.0.0.1:9067", "the address to listen for grpc on")
+	rootCmd.Flags().String("http-bind-addr", "127.0.0.1:9078", "the address to listen for http on")
+	rootCmd.Flags().String("grpc-bind-addr", "127.0.0.1:9077", "the address to listen for grpc on")
 	rootCmd.Flags().String("tls-cert", "./cert.pem", "the path to a TLS certificate")
 	rootCmd.Flags().String("tls-key", "./cert.key", "the path to a TLS key file")
 	rootCmd.Flags().Int("log-level", int(logrus.InfoLevel), "log level (logrus 1-7)")
 	rootCmd.Flags().String("log-file", "./server.log", "log file to write to")
-	rootCmd.Flags().String("zcash-conf-path", "./zcash.conf", "conf file to pull RPC creds from")
+	rootCmd.Flags().String("verus-conf-path", "./VRSC.conf", "conf file to pull RPC creds from")
 	rootCmd.Flags().String("rpcuser", "", "RPC user name")
 	rootCmd.Flags().String("rpcpassword", "", "RPC password")
 	rootCmd.Flags().String("rpchost", "", "RPC host")
@@ -310,9 +310,9 @@ func init() {
 	rootCmd.Flags().Int("darkside-timeout", 30, "override 30 minute default darkside timeout")
 
 	viper.BindPFlag("grpc-bind-addr", rootCmd.Flags().Lookup("grpc-bind-addr"))
-	viper.SetDefault("grpc-bind-addr", "127.0.0.1:9067")
+	viper.SetDefault("grpc-bind-addr", "127.0.0.1:9077")
 	viper.BindPFlag("http-bind-addr", rootCmd.Flags().Lookup("http-bind-addr"))
-	viper.SetDefault("http-bind-addr", "127.0.0.1:9068")
+	viper.SetDefault("http-bind-addr", "127.0.0.1:9078")
 	viper.BindPFlag("tls-cert", rootCmd.Flags().Lookup("tls-cert"))
 	viper.SetDefault("tls-cert", "./cert.pem")
 	viper.BindPFlag("tls-key", rootCmd.Flags().Lookup("tls-key"))
@@ -321,8 +321,8 @@ func init() {
 	viper.SetDefault("log-level", int(logrus.InfoLevel))
 	viper.BindPFlag("log-file", rootCmd.Flags().Lookup("log-file"))
 	viper.SetDefault("log-file", "./server.log")
-	viper.BindPFlag("zcash-conf-path", rootCmd.Flags().Lookup("zcash-conf-path"))
-	viper.SetDefault("zcash-conf-path", "./zcash.conf")
+	viper.BindPFlag("verus-conf-path", rootCmd.Flags().Lookup("verus-conf-path"))
+	viper.SetDefault("verus-conf-path", "./VRSC.conf")
 	viper.BindPFlag("rpcuser", rootCmd.Flags().Lookup("rpcuser"))
 	viper.BindPFlag("rpcpassword", rootCmd.Flags().Lookup("rpcpassword"))
 	viper.BindPFlag("rpchost", rootCmd.Flags().Lookup("rpchost"))
