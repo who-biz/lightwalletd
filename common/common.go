@@ -321,3 +321,73 @@ func GetBlockRange(cache *BlockCache, blockOut chan<- *walletrpc.CompactBlock, e
 func displayHash(hash []byte) string {
 	return hex.EncodeToString(parser.Reverse(hash))
 }
+
+func GetIdentity(request *walletrpc.GetIdentityRequest) (*walletrpc.GetIdentityResponse, error) {
+
+	params := make([]json.RawMessage, 1)
+	params[0] = json.RawMessage("\"" + request.GetIdentity() + "\"")
+	result, rpcErr := RawRequest("getidentity", params)
+
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+
+	response := &walletrpc.GetIdentityResponse{}
+	err := json.Unmarshal(result, &response.Identityinfo)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "error reading JSON response")
+	}
+
+	return response, nil
+}
+
+func VerifyMessage(request *walletrpc.VerifyMessageRequest) (*walletrpc.VerifyMessageResponse, error) {
+	params := make([]json.RawMessage, 4)
+	params[0] = json.RawMessage("\"" + request.Signer + "\"")
+	params[1] = json.RawMessage("\"" + request.Signature + "\"")
+	params[2] = json.RawMessage("\"" + request.Message + "\"")
+	params[3] = json.RawMessage("\"" + strconv.FormatBool(request.Checklatest) + "\"")
+
+	result, rpcErr := RawRequest("verifymessage", params)
+
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+
+	var signatureisvalid bool
+	err := json.Unmarshal(result, &signatureisvalid)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "error reading JSON response")
+	}
+
+	return &walletrpc.VerifyMessageResponse{
+		Signatureisvalid: signatureisvalid,
+	}, err
+}
+
+func VerifyHash(request *walletrpc.VerifyHashRequest) (*walletrpc.VerifyHashResponse, error) {
+	params := make([]json.RawMessage, 4)
+	params[0] = json.RawMessage("\"" + request.Signer + "\"")
+	params[1] = json.RawMessage("\"" + request.Signature + "\"")
+	params[2] = json.RawMessage("\"" + request.Hash + "\"")
+	params[3] = json.RawMessage("\"" + strconv.FormatBool(request.Checklatest) + "\"")
+
+	result, rpcErr := RawRequest("verifyhash", params)
+
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+
+	var signatureisvalid bool
+	err := json.Unmarshal(result, &signatureisvalid)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "error reading JSON response")
+	}
+
+	return &walletrpc.VerifyHashResponse{
+		Signatureisvalid: signatureisvalid,
+	}, err
+}

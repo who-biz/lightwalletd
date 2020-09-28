@@ -448,6 +448,62 @@ func (s *lwdStreamer) Ping(ctx context.Context, in *walletrpc.Duration) (*wallet
 	return &response, nil
 }
 
+func (s *lwdStreamer) GetIdentity(ctx context.Context, request *walletrpc.GetIdentityRequest) (*walletrpc.GetIdentityResponse, error) {
+	result, rpcErr := common.GetIdentity(request)
+
+	if rpcErr != nil {
+		common.Log.Errorf("UpdateIdentity error: %s", rpcErr.Error())
+		return nil, errors.New((strings.Split(rpcErr.Error(), ":"))[0])
+	}
+	return result, nil
+}
+
+func (s *lwdStreamer) VerifyMessage(ctx context.Context, request *walletrpc.VerifyMessageRequest) (*walletrpc.VerifyMessageResponse, error) {
+	// verifymessage "address or identity" "signature" "message" "checklatest"
+	//
+	// Verify a signed message
+	//
+	// Arguments:
+	// 1. "t-addr or identity" (string, required) The transparent address or identity that signed the message.
+	// 2. "signature"       (string, required) The signature provided by the signer in base 64 encoding (see signmessage).
+	// 3. "message"         (string, required) The message that was signed.
+	// 4. "checklatest"     (bool, optional)   If true, checks signature validity based on latest identity. defaults to false,
+	//                                          which determines validity of signing height stored in signature.
+	//
+	// Result:
+	// true|false   (boolean) If the signature is verified or not.
+	result, rpcErr := common.VerifyMessage(request)
+
+	if rpcErr != nil {
+		common.Log.Errorf("VerifyMessage error: %s", rpcErr.Error())
+		return nil, errors.New((strings.Split(rpcErr.Error(), ":"))[0])
+	}
+	return result, nil
+}
+
+func (s *lwdStreamer) VerifyHash(ctx context.Context, request *walletrpc.VerifyHashRequest) (*walletrpc.VerifyHashResponse, error) {
+	// verifyhash "address or identity" "signature" "hexhash" "checklatest"
+	//
+	// Verify a signed message
+	//
+	// Arguments:
+	// 1. "t-addr or identity" (string, required) The transparent address or identity that signed the message.
+	// 2. "signature"       (string, required) The signature provided by the signer in base 64 encoding (see signfile).
+	// 3. "hexhash"         (string, required) Hash of the message or file that was signed.
+	// 4. "checklatest"     (bool, optional)   If true, checks signature validity based on latest identity. defaults to false,
+	//                                          which determines validity of signing height stored in signature.
+	//
+	// Result:
+	// true|false   (boolean) If the signature is verified or not.
+	result, rpcErr := common.VerifyHash(request)
+
+	if rpcErr != nil {
+		common.Log.Errorf("VerifyHash error: %s", rpcErr.Error())
+		return nil, errors.New((strings.Split(rpcErr.Error(), ":"))[0])
+	}
+	return result, nil
+}
+
 // SetMetaState lets the test driver control some GetLightdInfo values.
 func (s *DarksideStreamer) Reset(ctx context.Context, ms *walletrpc.DarksideMetaState) (*walletrpc.Empty, error) {
 	match, err := regexp.Match("\\A[a-fA-F0-9]+\\z", []byte(ms.BranchID))
