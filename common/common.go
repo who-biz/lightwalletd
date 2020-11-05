@@ -68,7 +68,9 @@ type (
 		Chaintip  string
 	}
 	Blockchaininfo struct {
+		Name      string
 		Chain     string
+		ChainID   string
 		Upgrades  map[string]Upgradeinfo
 		Headers   int
 		Consensus ConsensusInfo
@@ -76,7 +78,7 @@ type (
 )
 
 // GetSaplingInfo returns the result of the getblockchaininfo RPC to zcashd
-func GetSaplingInfo() (int, int, string, string) {
+func GetSaplingInfo() (int, int, string, string, string, string) {
 	// This request must succeed or we can't go on; give zcashd time to start up
 	var blockchaininfo Blockchaininfo
 	retryCount := 0
@@ -111,7 +113,7 @@ func GetSaplingInfo() (int, int, string, string) {
 		saplingHeight = saplingJSON.ActivationHeight
 	}
 
-	return saplingHeight, blockchaininfo.Headers, blockchaininfo.Chain,
+	return saplingHeight, blockchaininfo.Headers, blockchaininfo.Chain, blockchaininfo.Name, blockchaininfo.ChainID,
 		blockchaininfo.Consensus.Nextblock
 }
 

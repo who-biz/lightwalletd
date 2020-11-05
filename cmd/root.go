@@ -18,6 +18,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/syndtr/goleveldb/leveldb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
@@ -179,7 +180,9 @@ func startServer(opts *common.Options) error {
 
 	var saplingHeight int
 	var blockHeight int
+	var chain string
 	var chainName string
+	var chainID string
 	var branchID string
 	var rpcClient *rpcclient.Client
 	var err error
@@ -200,10 +203,12 @@ func startServer(opts *common.Options) error {
 		common.RawRequest = rpcClient.RawRequest
 		// Get the sapling activation height from the RPC
 		// (this first RPC also verifies that we can communicate with zcashd)
-		saplingHeight, blockHeight, chainName, branchID = common.GetSaplingInfo()
+		saplingHeight, blockHeight, chain, chainName, chainID, branchID = common.GetSaplingInfo()
 		common.Log.Info("Got sapling height ", saplingHeight,
 			" block height ", blockHeight,
-			" chain ", chainName,
+			" chain ", chain,
+			" name ", chainName,
+			" chainID ", chainID,
 			" branchID ", branchID)
 	}
 
@@ -220,7 +225,12 @@ func startServer(opts *common.Options) error {
 		os.Stderr.WriteString(fmt.Sprintf("\n  ** Can't create db directory: %s\n\n", dbPath))
 		os.Exit(1)
 	}
-	cache := common.NewBlockCache(dbPath, chainName, saplingHeight, opts.Redownload)
+
+	// leveldb instances are safe for concurrent use.
+	db, err := leveldb.OpenFile(dbPath, nil)
+	defer db.Close()
+
+	cache := common.NewBlockCache(db, chainID, saplingHeight, opts.Redownload)
 	if !opts.Darkside {
 		go common.BlockIngestor(cache, 0 /*loop forever*/)
 	} else {

@@ -204,7 +204,7 @@ func (s *lwdStreamer) GetTransaction(ctx context.Context, txf *walletrpc.TxFilte
 // GetLightdInfo gets the LightWalletD (this server) info, and includes information
 // it gets from its backend zcashd.
 func (s *lwdStreamer) GetLightdInfo(ctx context.Context, in *walletrpc.Empty) (*walletrpc.LightdInfo, error) {
-	saplingHeight, blockHeight, chainName, consensusBranchID := common.GetSaplingInfo()
+	saplingHeight, blockHeight, _, chainName, _, consensusBranchID := common.GetSaplingInfo()
 
 	vendor := "ECC LightWalletD"
 	if common.DarksideEnabled {
