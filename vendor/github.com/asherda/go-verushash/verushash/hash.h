@@ -6,11 +6,11 @@
 #ifndef BITCOIN_HASH_H
 #define BITCOIN_HASH_H
 
-#include "include/ripemd160.h"
-#include "include/sha256.h"
-#include "include/verus_hash.h"
-#include "include/uint256.h"
-#include <sodium.h>
+#include "crypto/ripemd160.h"
+#include "crypto/sha256.h"
+#include "crypto/verus_hash.h"
+#include "crypto/uint256.h"
+#include "crypto/sodium.h"
 #include "prevector.h"
 #include "serialize.h"
 #include <vector>
@@ -296,7 +296,7 @@ public:
     int nType;
     int nVersion;
 
-    CVerusHashV2bWriter(int nTypeIn, int nVersionIn, int solutionVersion=SOLUTION_VERUSHHASH_V2, uint64_t keysize=VERUSKEYSIZE) : 
+    CVerusHashV2bWriter(int nTypeIn, int nVersionIn, int solutionVersion=SOLUTION_VERUSHHASH_V2, uint64_t keysize=VERUSKEYSIZE) :
         nType(nTypeIn), nVersion(nVersionIn), state(solutionVersion) {}
 
     void Reset() { state.Reset(); }
@@ -336,9 +336,9 @@ public:
     int nType;
     int nVersion;
 
-    CBLAKE2bWriter(int nTypeIn, 
+    CBLAKE2bWriter(int nTypeIn,
                    int nVersionIn,
-                   const unsigned char *personal=BLAKE2Bpersonal) : 
+                   const unsigned char *personal=BLAKE2Bpersonal) :
                    nType(nTypeIn), nVersion(nVersionIn)
     {
         if (crypto_generichash_blake2b_init_salt_personal(
