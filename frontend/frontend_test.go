@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -38,7 +37,7 @@ const (
 func testsetup() (walletrpc.CompactTxStreamerServer, *common.BlockCache) {
 	os.RemoveAll(unitTestPath)
 	cache := common.NewBlockCache(unitTestPath, unitTestChain, 380640, true)
-	lwd, err := NewLwdStreamer(cache)
+	lwd, err := NewLwdStreamer(cache, "main")
 	if err != nil {
 		os.Stderr.WriteString(fmt.Sprint("NewLwdStreamer failed:", err))
 		os.Exit(1)
@@ -214,11 +213,7 @@ func zcashdrpcStub(method string, params []json.RawMessage) (json.RawMessage, er
 	step++
 	switch method {
 	case "getaddresstxids":
-		var filter struct {
-			Addresses []string
-			Start     float64
-			End       float64
-		}
+		var filter common.ZcashdRpcRequestGetaddresstxids
 		err := json.Unmarshal(params[0], &filter)
 		if err != nil {
 			testT.Fatal("could not unmarshal block filter")
@@ -239,10 +234,7 @@ func zcashdrpcStub(method string, params []json.RawMessage) (json.RawMessage, er
 	case "getrawtransaction":
 		switch step {
 		case 2:
-			tx := &struct {
-				Hex    string `json:"hex"`
-				Height int    `json:"height"`
-			}{
+			tx := &common.ZcashdRpcRequestGetrawtransaction{
 				Hex:    hex.EncodeToString(rawTxData[0]),
 				Height: 1234567,
 			}
@@ -313,6 +305,44 @@ func TestGetTaddressTxids(t *testing.T) {
 	step = 0
 }
 
+func TestGetTaddressTxidsNilArgs(t *testing.T) {
+	lwd, _ := testsetup()
+
+	{
+		noRange := &walletrpc.TransparentAddressBlockFilter{
+			Range: nil,
+		}
+		err := lwd.GetTaddressTxids(noRange, &testgettx{})
+		if err == nil {
+			t.Fatal("GetBlockRange nil range argument should fail")
+		}
+	}
+	{
+		noStart := &walletrpc.TransparentAddressBlockFilter{
+			Range: &walletrpc.BlockRange{
+				Start: nil,
+				End:   &walletrpc.BlockID{Height: 20},
+			},
+		}
+		err := lwd.GetTaddressTxids(noStart, &testgettx{})
+		if err == nil {
+			t.Fatal("GetBlockRange nil range argument should fail")
+		}
+	}
+	{
+		noEnd := &walletrpc.TransparentAddressBlockFilter{
+			Range: &walletrpc.BlockRange{
+				Start: &walletrpc.BlockID{Height: 30},
+				End:   nil,
+			},
+		}
+		err := lwd.GetTaddressTxids(noEnd, &testgettx{})
+		if err == nil {
+			t.Fatal("GetBlockRange nil range argument should fail")
+		}
+	}
+}
+
 func TestGetBlock(t *testing.T) {
 	testT = t
 	common.RawRequest = getblockStub
@@ -354,7 +384,7 @@ func TestGetBlock(t *testing.T) {
 }
 
 type testgetbrange struct {
-	walletrpc.CompactTxStreamer_GetTaddressTxidsServer
+	walletrpc.CompactTxStreamer_GetBlockRangeServer
 }
 
 func (tg *testgetbrange) Context() context.Context {
@@ -388,25 +418,29 @@ func TestGetBlockRange(t *testing.T) {
 	step = 0
 }
 
-func getblockchaininfoStub(method string, params []json.RawMessage) (json.RawMessage, error) {
-	getsaplinginfo, _ := ioutil.ReadFile("../testdata/getsaplinginfo")
-	getblockchaininfoReply, _ := hex.DecodeString(string(getsaplinginfo))
-	return getblockchaininfoReply, nil
-}
-
-func TestGetLightdInfo(t *testing.T) {
-	testT = t
-	common.RawRequest = getblockchaininfoStub
+func TestGetBlockRangeNilArgs(t *testing.T) {
 	lwd, _ := testsetup()
 
-	ldinfo, err := lwd.GetLightdInfo(context.Background(), &walletrpc.Empty{})
-	if err != nil {
-		t.Fatal("GetLightdInfo failed", err)
+	{
+		noEnd := &walletrpc.BlockRange{
+			Start: &walletrpc.BlockID{Height: 380640},
+			End:   nil,
+		}
+		err := lwd.GetBlockRange(noEnd, &testgetbrange{})
+		if err == nil {
+			t.Fatal("GetBlockRange nil argument should fail")
+		}
 	}
-	if ldinfo.Vendor != "ECC LightWalletD" {
-		t.Fatal("GetLightdInfo: unexpected vendor", ldinfo)
+	{
+		noStart := &walletrpc.BlockRange{
+			Start: nil,
+			End:   &walletrpc.BlockID{Height: 380640},
+		}
+		err := lwd.GetBlockRange(noStart, &testgetbrange{})
+		if err == nil {
+			t.Fatal("GetBlockRange nil argument should fail")
+		}
 	}
-	step = 0
 }
 
 func sendrawtransactionStub(method string, params []json.RawMessage) (json.RawMessage, error) {
