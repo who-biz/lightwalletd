@@ -74,7 +74,9 @@ type (
 		Chaintip  string // example: "e9ff75a6" (canopy)
 	}
 	ZcashdRpcReplyGetblockchaininfo struct {
+		Name      string
 		Chain           string
+		ChainID   string
 		Upgrades        map[string]Upgradeinfo
 		Blocks          int
 		Consensus       ConsensusInfo

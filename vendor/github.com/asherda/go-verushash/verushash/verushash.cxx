@@ -6,8 +6,8 @@
 #include <vector>
 #include <csignal>
 #include <sodium.h>
-//#include <iostream>
-#include "include/verus_hash.h"
+#include <iostream>
+#include "crypto/verus_hash.h"
 #include "solutiondata.h"
 
 #include <sstream>
