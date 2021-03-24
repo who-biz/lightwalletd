@@ -24,23 +24,26 @@ import (
 )
 
 type lwdStreamer struct {
-	cache     *common.BlockCache
-	chainName string
+	cache      *common.BlockCache
+	chainName  string
+	pingEnable bool
+	walletrpc.UnimplementedCompactTxStreamerServer
 }
 
 // NewLwdStreamer constructs a gRPC context.
-func NewLwdStreamer(cache *common.BlockCache, chainName string) (walletrpc.CompactTxStreamerServer, error) {
-	return &lwdStreamer{cache, chainName}, nil
+func NewLwdStreamer(cache *common.BlockCache, chainName string, enablePing bool) (walletrpc.CompactTxStreamerServer, error) {
+	return &lwdStreamer{cache: cache, chainName: chainName, pingEnable: enablePing}, nil
 }
 
 // DarksideStreamer holds the gRPC state for darksidewalletd.
 type DarksideStreamer struct {
 	cache *common.BlockCache
+	walletrpc.UnimplementedDarksideStreamerServer
 }
 
 // NewDarksideStreamer constructs a gRPC context for darksidewalletd.
 func NewDarksideStreamer(cache *common.BlockCache) (walletrpc.DarksideStreamerServer, error) {
-	return &DarksideStreamer{cache}, nil
+	return &DarksideStreamer{cache: cache}, nil
 }
 
 // Test to make sure Address is a single t address
@@ -86,20 +89,21 @@ func (s *lwdStreamer) GetTaddressTxids(addressBlockFilter *walletrpc.Transparent
 		Start:     addressBlockFilter.Range.Start.Height,
 		End:       addressBlockFilter.Range.End.Height,
 	}
-	params[0], _ = json.Marshal(request)
-
+	param, err := json.Marshal(request)
+	if err != nil {
+		return err
+	}
+	params[0] = param
 	result, rpcErr := common.RawRequest("getaddresstxids", params)
 
 	// For some reason, the error responses are not JSON
 	if rpcErr != nil {
-		common.Log.Errorf("GetTaddressTxids error: %s", rpcErr.Error())
 		return rpcErr
 	}
 
 	var txids []string
-	err := json.Unmarshal(result, &txids)
+	err = json.Unmarshal(result, &txids)
 	if err != nil {
-		common.Log.Errorf("GetTaddressTxids error: %s", err.Error())
 		return err
 	}
 
@@ -112,7 +116,6 @@ func (s *lwdStreamer) GetTaddressTxids(addressBlockFilter *walletrpc.Transparent
 		// to bytes, it should be little-endian
 		tx, err := s.GetTransaction(timeout, &walletrpc.TxFilter{Hash: parser.Reverse(txid)})
 		if err != nil {
-			common.Log.Errorf("GetTransaction error: %s", err.Error())
 			return err
 		}
 		if err = resp.Send(tx); err != nil {
@@ -232,9 +235,11 @@ func (s *lwdStreamer) GetTreeState(ctx context.Context, id *walletrpc.BlockID) (
 // by the zcashd 'getrawtransaction' RPC.
 func (s *lwdStreamer) GetTransaction(ctx context.Context, txf *walletrpc.TxFilter) (*walletrpc.RawTransaction, error) {
 	if txf.Hash != nil {
+		if len(txf.Hash) != 32 {
+			return nil, errors.New("Transaction ID has invalid length")
+		}
 		leHashStringJSON, err := json.Marshal(hex.EncodeToString(parser.Reverse(txf.Hash)))
 		if err != nil {
-			common.Log.Errorf("GetTransaction: cannot encode txid: %s", err.Error())
 			return nil, err
 		}
 		params := []json.RawMessage{
@@ -245,7 +250,6 @@ func (s *lwdStreamer) GetTransaction(ctx context.Context, txf *walletrpc.TxFilte
 
 		// For some reason, the error responses are not JSON
 		if rpcErr != nil {
-			common.Log.Errorf("GetTransaction error: %s", rpcErr.Error())
 			return nil, rpcErr
 		}
 		// Many other fields are returned, but we need only these two.
@@ -265,10 +269,8 @@ func (s *lwdStreamer) GetTransaction(ctx context.Context, txf *walletrpc.TxFilte
 	}
 
 	if txf.Block != nil && txf.Block.Hash != nil {
-		common.Log.Error("Can't GetTransaction with a blockhash+num. Please call GetTransaction with txid")
 		return nil, errors.New("Can't GetTransaction with a blockhash+num. Please call GetTransaction with txid")
 	}
-	common.Log.Error("Please call GetTransaction with txid")
 	return nil, errors.New("Please call GetTransaction with txid")
 }
 
@@ -289,17 +291,22 @@ func (s *lwdStreamer) SendTransaction(ctx context.Context, rawtx *walletrpc.RawT
 
 	// Construct raw JSON-RPC params
 	params := make([]json.RawMessage, 1)
-	txJSON, _ := json.Marshal(hex.EncodeToString(rawtx.Data))
+	txJSON, err := json.Marshal(hex.EncodeToString(rawtx.Data))
+	if err != nil {
+		return &walletrpc.SendResponse{}, err
+	}
 	params[0] = txJSON
 	result, rpcErr := common.RawRequest("sendrawtransaction", params)
 
-	var err error
 	var errCode int64
 	var errMsg string
 
 	// For some reason, the error responses are not JSON
 	if rpcErr != nil {
 		errParts := strings.SplitN(rpcErr.Error(), ":", 2)
+		if len(errParts) < 2 {
+			return nil, errors.New("SendTransaction couldn't parse error code")
+		}
 		errMsg = strings.TrimSpace(errParts[1])
 		errCode, err = strconv.ParseInt(errParts[0], 10, 32)
 		if err != nil {
@@ -320,18 +327,27 @@ func (s *lwdStreamer) SendTransaction(ctx context.Context, rawtx *walletrpc.RawT
 }
 
 func getTaddressBalanceZcashdRpc(addressList []string) (*walletrpc.Balance, error) {
+	for _, addr := range addressList {
+		if err := checkTaddress(addr); err != nil {
+			return &walletrpc.Balance{}, err
+		}
+	}
 	params := make([]json.RawMessage, 1)
-	addrList := &common.ZcashdRpcREquestGetaddressbalance{
+	addrList := &common.ZcashdRpcRequestGetaddressbalance{
 		Addresses: addressList,
 	}
-	params[0], _ = json.Marshal(addrList)
+	param, err := json.Marshal(addrList)
+	if err != nil {
+		return &walletrpc.Balance{}, err
+	}
+	params[0] = param
 
 	result, rpcErr := common.RawRequest("getaddressbalance", params)
 	if rpcErr != nil {
 		return &walletrpc.Balance{}, rpcErr
 	}
 	var balanceReply common.ZcashdRpcReplyGetaddressbalance
-	err := json.Unmarshal(result, &balanceReply)
+	err = json.Unmarshal(result, &balanceReply)
 	if err != nil {
 		return &walletrpc.Balance{}, err
 	}
@@ -394,19 +410,21 @@ func (s *lwdStreamer) GetMempoolTx(exclude *walletrpc.Exclude, resp walletrpc.Co
 				newmempoolMap[txidstr] = ctx
 				continue
 			}
-			txidJSON, _ := json.Marshal(txidstr)
+			txidJSON, err := json.Marshal(txidstr)
+			if err != nil {
+				return err
+			}
 			// The "0" is because we only need the raw hex, which is returned as
 			// just a hex string, and not even a json string (with quotes).
 			params := []json.RawMessage{txidJSON, json.RawMessage("0")}
 			result, rpcErr := common.RawRequest("getrawtransaction", params)
 			if rpcErr != nil {
 				// Not an error; mempool transactions can disappear
-				common.Log.Errorf("GetTransaction error: %s", rpcErr.Error())
 				continue
 			}
 			// strip the quotes
 			var txStr string
-			err := json.Unmarshal(result, &txStr)
+			err = json.Unmarshal(result, &txStr)
 			if err != nil {
 				return err
 			}
@@ -495,13 +513,17 @@ func getAddressUtxos(arg *walletrpc.GetAddressUtxosArg, f func(*walletrpc.GetAdd
 		return err
 	}
 	params := make([]json.RawMessage, 1)
-	params[0], _ = json.Marshal(arg.Address)
+	param, err := json.Marshal(arg.Address)
+	if err != nil {
+		return err
+	}
+	params[0] = param
 	result, rpcErr := common.RawRequest("getaddressutxos", params)
 	if rpcErr != nil {
 		return rpcErr
 	}
 	var utxosReply common.ZcashdRpcReplyGetaddressutxos
-	err := json.Unmarshal(result, &utxosReply)
+	err = json.Unmarshal(result, &utxosReply)
 	if err != nil {
 		return err
 	}
@@ -562,6 +584,12 @@ func (s *lwdStreamer) GetAddressUtxosStream(arg *walletrpc.GetAddressUtxosArg, r
 var concurrent int64
 
 func (s *lwdStreamer) Ping(ctx context.Context, in *walletrpc.Duration) (*walletrpc.PingResponse, error) {
+	// This gRPC allows the client to create an arbitrary number of
+	// concurrent threads, which could run the server out of resources,
+	// so only allow if explicitly enabled.
+	if !s.pingEnable {
+		return nil, errors.New("Ping not enabled, start lightwalletd with --ping-very-insecure")
+	}
 	var response walletrpc.PingResponse
 	response.Entry = atomic.AddInt64(&concurrent, 1)
 	time.Sleep(time.Duration(in.IntervalUs) * time.Microsecond)

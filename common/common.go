@@ -28,6 +28,7 @@ var (
 
 type Options struct {
 	GRPCBindAddr        string `json:"grpc_bind_address,omitempty"`
+	GRPCLogging         bool   `json:"grpc_logging_insecure,omitempty"`
 	HTTPBindAddr        string `json:"http_bind_address,omitempty"`
 	TLSCertPath         string `json:"tls_cert_path,omitempty"`
 	TLSKeyPath          string `json:"tls_cert_key,omitempty"`
@@ -42,6 +43,7 @@ type Options struct {
 	GenCertVeryInsecure bool   `json:"gen_cert_very_insecure,omitempty"`
 	Redownload          bool   `json:"redownload"`
 	DataDir             string `json:"data_dir"`
+	PingEnable          bool   `json:"ping_enable"`
 	Darkside            bool   `json:"darkside"`
 	DarksideTimeout     uint64 `json:"darkside_timeout"`
 }
@@ -68,31 +70,28 @@ type (
 		Status           string // "active"
 	}
 	ConsensusInfo struct { // consensus branch IDs
-		Nextblock string
-		Chaintip  string
+		Nextblock string // example: "e9ff75a6" (canopy)
+		Chaintip  string // example: "e9ff75a6" (canopy)
 	}
 	ZcashdRpcReplyGetblockchaininfo struct {
 		Chain           string
 		Upgrades        map[string]Upgradeinfo
-		Headers         int
+		Blocks          int
 		Consensus       ConsensusInfo
 		EstimatedHeight int
 	}
 
 	// zcashd rpc "getinfo"
 	ZcashdRpcReplyGetinfo struct {
-		Height            int
-		ChainName         string
-		ConsensusBranchID string
-		Build             string
-		Subversion        string
+		Build      string
+		Subversion string
 	}
 
 	// zcashd rpc "getaddresstxids"
 	ZcashdRpcRequestGetaddresstxids struct {
-		Addresses []string
-		Start     uint64
-		End       uint64
+		Addresses []string `json:"addresses"`
+		Start     uint64   `json:"start"`
+		End       uint64   `json:"end"`
 	}
 
 	// zcashd rpc "z_gettreestate"
@@ -109,18 +108,14 @@ type (
 	}
 
 	// zcashd rpc "getrawtransaction"
-	ZcashdRpcRequestGetrawtransaction struct {
-		Hex    string
-		Height int
-	}
 	ZcashdRpcReplyGetrawtransaction struct {
 		Hex    string
 		Height int
 	}
 
 	// zcashd rpc "getaddressbalance"
-	ZcashdRpcREquestGetaddressbalance struct {
-		Addresses []string
+	ZcashdRpcRequestGetaddressbalance struct {
+		Addresses []string `json:"addresses"`
 	}
 	ZcashdRpcReplyGetaddressbalance struct {
 		Balance int64
@@ -201,10 +196,10 @@ func GetLightdInfo() (*walletrpc.LightdInfo, error) {
 		Version:                 Version,
 		Vendor:                  vendor,
 		TaddrSupport:            true,
-		ChainName:               getinfoReply.ChainName,
+		ChainName:               getblockchaininfoReply.Chain,
 		SaplingActivationHeight: uint64(saplingHeight),
-		ConsensusBranchId:       getinfoReply.ConsensusBranchID,
-		BlockHeight:             uint64(getinfoReply.Height),
+		ConsensusBranchId:       getblockchaininfoReply.Consensus.Chaintip,
+		BlockHeight:             uint64(getblockchaininfoReply.Blocks),
 		GitCommit:               GitCommit,
 		Branch:                  Branch,
 		BuildDate:               BuildDate,

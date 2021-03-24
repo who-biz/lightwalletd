@@ -281,8 +281,7 @@ func (c *BlockCache) Add(height int, block *walletrpc.CompactBlock) error {
 	}
 	bheight := int(block.Height)
 
-	// XXX check? TODO COINBASE-HEIGHT: restore this check after coinbase height is fixed
-	if false && bheight != height {
+	if bheight != height {
 		// This could only happen if zcashd returned the wrong
 		// block (not the height we requested).
 		Log.Fatal("cache.Add wrong height: ", bheight, " expecting: ", height)
@@ -294,15 +293,22 @@ func (c *BlockCache) Add(height int, block *walletrpc.CompactBlock) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.blocksFile.Write(append(checksum(height, data), data...))
+	b := append(checksum(height, data), data...)
+	n, err := c.blocksFile.Write(b)
 	if err != nil {
 		Log.Fatal("blocks write failed: ", err)
 	}
-	b := make([]byte, 4)
+	if n != len(b) {
+		Log.Fatal("blocks write incorrect length: expected: ", len(b), "written: ", n)
+	}
+	b = make([]byte, 4)
 	binary.LittleEndian.PutUint32(b, uint32(len(data)))
-	_, err = c.lengthsFile.Write(b)
+	n, err = c.lengthsFile.Write(b)
 	if err != nil {
 		Log.Fatal("lengths write failed: ", err)
+	}
+	if n != len(b) {
+		Log.Fatal("lengths write incorrect length: expected: ", len(b), "written: ", n)
 	}
 
 	// update the in-memory variables
