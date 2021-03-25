@@ -74,9 +74,9 @@ type (
 		Chaintip  string // example: "e9ff75a6" (canopy)
 	}
 	ZcashdRpcReplyGetblockchaininfo struct {
-		Name      string
+		Name            string
 		Chain           string
-		ChainID   string
+		ChainID         string
 		Upgrades        map[string]Upgradeinfo
 		Blocks          int
 		Consensus       ConsensusInfo
@@ -198,7 +198,7 @@ func GetLightdInfo() (*walletrpc.LightdInfo, error) {
 		Version:                 Version,
 		Vendor:                  vendor,
 		TaddrSupport:            true,
-		ChainName:               getblockchaininfoReply.Chain,
+		ChainName:               getblockchaininfoReply.Name,
 		SaplingActivationHeight: uint64(saplingHeight),
 		ConsensusBranchId:       getblockchaininfoReply.Consensus.Chaintip,
 		BlockHeight:             uint64(getblockchaininfoReply.Blocks),

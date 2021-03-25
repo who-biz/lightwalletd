@@ -4,7 +4,7 @@
 
 syntax = "proto3";
 package cash.z.wallet.sdk.rpc;
-option go_package = ".;walletrpc";
+option go_package = "./walletrpc";
 option swift_prefix = "";
 import "compact_formats.proto";
 
@@ -69,6 +69,7 @@ message LightdInfo {
     uint64 estimatedHeight = 12;        // less than tip height if zcashd is syncing
     string zcashdBuild = 13;            // example: "v4.1.1-877212414"
     string zcashdSubversion = 14;       // example: "/MagicBean:4.1.1/"
+    string chainID = 15;
 }
 
 // TransparentAddressBlockFilter restricts the results to the given address

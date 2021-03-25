@@ -1266,6 +1266,13 @@ into a specified block on the next ApplyStaged().</p></td>
                   <td><p>example: &#34;/MagicBean:4.1.1/&#34; </p></td>
                 </tr>
               
+                <tr>
+                  <td>chainID</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
             </tbody>
           </table>
 
@@ -1607,7 +1614,7 @@ The block can be specified by either height or hash.</p></td>
                 <td>Ping</td>
                 <td><a href="#cash.z.wallet.sdk.rpc.Duration">Duration</a></td>
                 <td><a href="#cash.z.wallet.sdk.rpc.PingResponse">PingResponse</a></td>
-                <td><p>Testing-only</p></td>
+                <td><p>Testing-only, requires lightwalletd --ping-very-insecure (do not enable in production)</p></td>
               </tr>
             
           </tbody>

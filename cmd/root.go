@@ -184,6 +184,7 @@ func startServer(opts *common.Options) error {
 
 	var saplingHeight int
 	var chainName string
+	var chainID string
 	var rpcClient *rpcclient.Client
 	var err error
 	if opts.Darkside {
@@ -217,6 +218,7 @@ func startServer(opts *common.Options) error {
 			" branchID ", getLightdInfo.ConsensusBranchId)
 		saplingHeight = int(getLightdInfo.SaplingActivationHeight)
 		chainName = getLightdInfo.ChainName
+		chainID = getLightdInfo.ChainID
 	}
 
 	dbPath := filepath.Join(opts.DataDir, "db")
