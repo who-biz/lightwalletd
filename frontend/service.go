@@ -509,11 +509,16 @@ func MempoolFilter(items, exclude []string) []string {
 }
 
 func getAddressUtxos(arg *walletrpc.GetAddressUtxosArg, f func(*walletrpc.GetAddressUtxosReply) error) error {
-	if err := checkTaddress(arg.Address); err != nil {
-		return err
+	for _, a := range arg.Addresses {
+		if err := checkTaddress(a); err != nil {
+			return err
+		}
 	}
 	params := make([]json.RawMessage, 1)
-	param, err := json.Marshal(arg.Address)
+	addrList := &common.ZcashdRpcRequestGetaddressutxos{
+		Addresses: arg.Addresses,
+	}
+	param, err := json.Marshal(addrList)
 	if err != nil {
 		return err
 	}
@@ -522,7 +527,7 @@ func getAddressUtxos(arg *walletrpc.GetAddressUtxosArg, f func(*walletrpc.GetAdd
 	if rpcErr != nil {
 		return rpcErr
 	}
-	var utxosReply common.ZcashdRpcReplyGetaddressutxos
+	var utxosReply []common.ZcashdRpcReplyGetaddressutxos
 	err = json.Unmarshal(result, &utxosReply)
 	if err != nil {
 		return err
@@ -545,6 +550,7 @@ func getAddressUtxos(arg *walletrpc.GetAddressUtxosArg, f func(*walletrpc.GetAdd
 			return err
 		}
 		err = f(&walletrpc.GetAddressUtxosReply{
+			Address:  utxo.Address,
 			Txid:     parser.Reverse(txidBytes),
 			Index:    int32(utxo.OutputIndex),
 			Script:   scriptBytes,
@@ -699,4 +705,24 @@ func (s *DarksideStreamer) GetIncomingTransactions(in *walletrpc.Empty, resp wal
 func (s *DarksideStreamer) ClearIncomingTransactions(ctx context.Context, e *walletrpc.Empty) (*walletrpc.Empty, error) {
 	common.DarksideClearIncomingTransactions()
 	return &walletrpc.Empty{}, nil
+}
+
+// AddAddressUtxo adds a UTXO which will be returned by GetAddressUtxos() (above)
+func (s *DarksideStreamer) AddAddressUtxo(ctx context.Context, arg *walletrpc.GetAddressUtxosReply) (*walletrpc.Empty, error) {
+	utxosReply := common.ZcashdRpcReplyGetaddressutxos{
+		Address:     arg.Address,
+		Txid:        hex.EncodeToString(parser.Reverse(arg.Txid)),
+		OutputIndex: int64(arg.Index),
+		Script:      hex.EncodeToString(arg.Script),
+		Satoshis:    uint64(arg.ValueZat),
+		Height:      int(arg.Height),
+	}
+	err := common.DarksideAddAddressUtxo(utxosReply)
+	return &walletrpc.Empty{}, err
+}
+
+// ClearAddressUtxo removes the list of cached utxo entries
+func (s *DarksideStreamer) ClearAddressUtxo(ctx context.Context, arg *walletrpc.Empty) (*walletrpc.Empty, error) {
+	err := common.DarksideClearAddressUtxos()
+	return &walletrpc.Empty{}, err
 }
