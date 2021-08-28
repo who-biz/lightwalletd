@@ -32,7 +32,8 @@ message TxFilter {
 }
 
 // RawTransaction contains the complete transaction data. It also optionally includes 
-// the block height in which the transaction was included.
+// the block height in which the transaction was included, or, when returned
+// by GetMempoolStream(), the latest block height.
 message RawTransaction {
     bytes data = 1;     // exact data returned by Zcash 'getrawtransaction'
     uint64 height = 2;  // height that the transaction was mined (or -1)
@@ -104,10 +105,6 @@ message Balance {
     int64 valueZat = 1;
 }
 
-message Exclude {
-    repeated bytes txid = 1;
-}
-
 // The TreeState is derived from the Zcash z_gettreestate rpc.
 message TreeState {
     string network = 1; // "main" or "test"
@@ -154,16 +151,9 @@ service CompactTxStreamer {
     rpc GetTaddressBalance(AddressList) returns (Balance) {}
     rpc GetTaddressBalanceStream(stream Address) returns (Balance) {}
 
-    // Return the compact transactions currently in the mempool; the results
-    // can be a few seconds out of date. If the Exclude list is empty, return
-    // all transactions; otherwise return all *except* those in the Exclude list
-    // (if any); this allows the client to avoid receiving transactions that it
-    // already has (from an earlier call to this rpc). The transaction IDs in the
-    // Exclude list can be shortened to any number of bytes to make the request
-    // more bandwidth-efficient; if two or more transactions in the mempool
-    // match a shortened txid, they are all sent (none is excluded). Transactions
-    // in the exclude list that don't exist in the mempool are ignored.
-    rpc GetMempoolTx(Exclude) returns (stream CompactTx) {}
+    // Return a stream of current Mempool transactions. This will keep the output stream open while
+    // there are mempool transactions. It will close the returned stream when a new block is mined.
+    rpc GetMempoolStream(Empty) returns (stream RawTransaction) {}
 
     // GetTreeState returns the note commitment tree state corresponding to the given block.
     // See section 3.7 of the Zcash protocol specification. It returns several other useful
