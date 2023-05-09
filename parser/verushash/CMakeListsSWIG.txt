@@ -1,0 +1,36 @@
+cmake_policy(SET CMP0078 NEW)
+cmake_policy(SET CMP0086 NEW)
+find_package(SWIG 4.0.0 QUIET)
+if(SWIG_FOUND)
+    if(${SWIG_VERSION} VERSION_LESS 4.0.0)
+        message(FATAL_ERROR "SWIG version 4.0.0 or greater is required")
+    endif()
+else()
+    message(FATAL_ERROR "SWIG version 4.0.0 or greater is required")
+endif()
+include(UseSWIG)
+
+set(SWIG_MODULE_NAME "verushash")
+set(CMAKE_SWIG_FLAGS -c++ -go -intgosize 64)
+set_source_files_properties(verushash.i PROPERTIES CPLUSPLUS ON)
+
+# Generate the Go bindings inside the verushash directory
+set(VERUSHASH_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+swig_add_library(${SWIG_MODULE_NAME}
+    TYPE STATIC
+    LANGUAGE go
+    OUTPUT_DIR ${VERUSHASH_OUTPUT_DIR}
+    SOURCES verushash.i
+)
+
+# Include the necessary directories
+target_include_directories(${SWIG_MODULE_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(${SWIG_MODULE_NAME} PRIVATE ${CMAKE_BINARY_DIR}/include)
+
+# Link the libraries to the verushash target
+target_link_libraries(${SWIG_MODULE_NAME} PRIVATE verus_crypto sodium)
+
+set_target_properties(${SWIG_MODULE_NAME} PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+)

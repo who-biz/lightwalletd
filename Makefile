@@ -133,6 +133,7 @@ docker_remove_all:
 # Get dependencies
 dep:
 	@go get -v -d ./...
+	cd parser/verushash && mkdir "build" && cd build && cmake .. && make
 
 # Build binary
 build:

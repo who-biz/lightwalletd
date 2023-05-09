@@ -1,12 +1,11 @@
 package verushash
 
 import (
-	"github.com/asherda/go-verushash/verushash"
 	"unsafe"
 )
 
 // Initialize verushash object once.
-var verusHash = VH.NewVerushash()
+var verusHash = NewVerushash()
 
 func VerusHash(serializedHeader []byte) []byte {
 	hash := make([]byte, 32)

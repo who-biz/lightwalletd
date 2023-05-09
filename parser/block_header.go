@@ -8,8 +8,9 @@ package parser
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/asherda/go-verushash"
 	"github.com/asherda/lightwalletd/parser/internal/bytestring"
+	"github.com/asherda/lightwalletd/parser/verushash"
+
 	"github.com/pkg/errors"
 	"math/big"
 )
@@ -246,6 +247,7 @@ func hashHeader(serializedHeader []byte) []byte {
 			if serializedHeader[143] < 4 {
 				return verushash.VerusHash_V2B1(serializedHeader)
 			} else {
+				//		fmt.Println(hex.EncodeToString(Reverse(verushash.VerusHash_V2B2(serializedHeader))))
 				return verushash.VerusHash_V2B2(serializedHeader)
 			}
 		}

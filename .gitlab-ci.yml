@@ -10,7 +10,7 @@
  #  IMPORTANT NOTE: any job with preceeding '.'' is ignored in pipeline 
  # ************************************************************************/
  
-image: golang:1.11-alpine
+image: golang:1.18-alpine
   
 stages:
   - build
@@ -19,7 +19,7 @@ stages:
   - monitor
 
 before_script:
-  - apk update && apk add make git gcc musl-dev curl bash
+  - apk update && apk add make git gcc g++ cmake musl-dev curl bash
 
 # ************************************************************************/
 # BUILD
@@ -37,11 +37,30 @@ before_script:
 build:build-linux:
   stage: build
   script:
+    - cd parser/verushash
+    - go install
+    - cd ../..
     - make
   artifacts:
     paths:
     - ./lightwalletd
-
+build:build-linux2:
+  image: golang:1.18
+  stage: build
+  script:
+    - apt update
+    - apt install -y  build-essential pkg-config libc6-dev m4 g++-multilib autoconf libtool ncurses-dev unzip git zlib1g-dev wget bsdmainutils automake curl cmake libboost-all-dev libsodium-dev libsodium23
+    - cd parser/verushash
+    - cmake . -B build
+    - cd build
+    - make
+    - cd ..
+    - go install
+    - cd ../..
+    - make
+  artifacts:
+    paths:
+      - ./lightwalletd
 .build-windows:
   stage: build
   script:

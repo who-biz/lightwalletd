@@ -9,6 +9,7 @@
 
 #include <stdio.h>
 #include <string>
+
 class Verushash {
 public:
   bool initialized = false;

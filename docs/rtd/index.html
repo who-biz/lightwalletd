@@ -277,10 +277,6 @@
                 </li>
               
                 <li>
-                  <a href="#cash.z.wallet.sdk.rpc.Exclude"><span class="badge">M</span>Exclude</a>
-                </li>
-              
-                <li>
                   <a href="#cash.z.wallet.sdk.rpc.GetAddressUtxosArg"><span class="badge">M</span>GetAddressUtxosArg</a>
                 </li>
               
@@ -836,6 +832,21 @@ into a specified block on the next ApplyStaged().</p></td>
                 <td><p>Clear the incoming transaction pool.</p></td>
               </tr>
             
+              <tr>
+                <td>AddAddressUtxo</td>
+                <td><a href="#cash.z.wallet.sdk.rpc.GetAddressUtxosReply">GetAddressUtxosReply</a></td>
+                <td><a href="#cash.z.wallet.sdk.rpc.Empty">Empty</a></td>
+                <td><p>Add a GetAddressUtxosReply entry to be returned by GetAddressUtxos().
+There is no staging or applying for these, very simple.</p></td>
+              </tr>
+            
+              <tr>
+                <td>ClearAddressUtxo</td>
+                <td><a href="#cash.z.wallet.sdk.rpc.Empty">Empty</a></td>
+                <td><a href="#cash.z.wallet.sdk.rpc.Empty">Empty</a></td>
+                <td><p>Clear the list of GetAddressUtxos entries (can&#39;t fail)</p></td>
+              </tr>
+            
           </tbody>
         </table>
 
@@ -1020,32 +1031,8 @@ into a specified block on the next ApplyStaged().</p></td>
 
         
       
-        <h3 id="cash.z.wallet.sdk.rpc.Exclude">Exclude</h3>
-        <p></p>
-
-        
-          <table class="field-table">
-            <thead>
-              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
-            </thead>
-            <tbody>
-              
-                <tr>
-                  <td>txid</td>
-                  <td><a href="#bytes">bytes</a></td>
-                  <td>repeated</td>
-                  <td><p> </p></td>
-                </tr>
-              
-            </tbody>
-          </table>
-
-          
-
-        
-      
         <h3 id="cash.z.wallet.sdk.rpc.GetAddressUtxosArg">GetAddressUtxosArg</h3>
-        <p></p>
+        <p>Results are sorted by height, which makes it easy to issue another</p><p>request that picks up from where the previous left off.</p>
 
         
           <table class="field-table">
@@ -1055,9 +1042,9 @@ into a specified block on the next ApplyStaged().</p></td>
             <tbody>
               
                 <tr>
-                  <td>address</td>
+                  <td>addresses</td>
                   <td><a href="#string">string</a></td>
-                  <td></td>
+                  <td>repeated</td>
                   <td><p> </p></td>
                 </tr>
               
@@ -1091,6 +1078,13 @@ into a specified block on the next ApplyStaged().</p></td>
               <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
             </thead>
             <tbody>
+              
+                <tr>
+                  <td>address</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
               
                 <tr>
                   <td>txid</td>
@@ -1312,7 +1306,7 @@ into a specified block on the next ApplyStaged().</p></td>
         
       
         <h3 id="cash.z.wallet.sdk.rpc.RawTransaction">RawTransaction</h3>
-        <p>RawTransaction contains the complete transaction data. It also optionally includes </p><p>the block height in which the transaction was included.</p>
+        <p>RawTransaction contains the complete transaction data. It also optionally includes </p><p>the block height in which the transaction was included, or, when returned</p><p>by GetMempoolStream(), the latest block height.</p>
 
         
           <table class="field-table">
@@ -1565,18 +1559,11 @@ into a specified block on the next ApplyStaged().</p></td>
               </tr>
             
               <tr>
-                <td>GetMempoolTx</td>
-                <td><a href="#cash.z.wallet.sdk.rpc.Exclude">Exclude</a></td>
-                <td><a href="#cash.z.wallet.sdk.rpc.CompactTx">CompactTx</a> stream</td>
-                <td><p>Return the compact transactions currently in the mempool; the results
-can be a few seconds out of date. If the Exclude list is empty, return
-all transactions; otherwise return all *except* those in the Exclude list
-(if any); this allows the client to avoid receiving transactions that it
-already has (from an earlier call to this rpc). The transaction IDs in the
-Exclude list can be shortened to any number of bytes to make the request
-more bandwidth-efficient; if two or more transactions in the mempool
-match a shortened txid, they are all sent (none is excluded). Transactions
-in the exclude list that don&#39;t exist in the mempool are ignored.</p></td>
+                <td>GetMempoolStream</td>
+                <td><a href="#cash.z.wallet.sdk.rpc.Empty">Empty</a></td>
+                <td><a href="#cash.z.wallet.sdk.rpc.RawTransaction">RawTransaction</a> stream</td>
+                <td><p>Return a stream of current Mempool transactions. This will keep the output stream open while
+there are mempool transactions. It will close the returned stream when a new block is mined.</p></td>
               </tr>
             
               <tr>
