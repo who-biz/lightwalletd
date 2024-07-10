@@ -23,10 +23,10 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/asherda/lightwalletd/common"
-	"github.com/asherda/lightwalletd/common/logging"
-	"github.com/asherda/lightwalletd/frontend"
-	"github.com/asherda/lightwalletd/walletrpc"
+	"github.com/who-biz/lightwalletd/common"
+	"github.com/who-biz/lightwalletd/common/logging"
+	"github.com/who-biz/lightwalletd/frontend"
+	"github.com/who-/lightwalletd/walletrpc"
 )
 
 var cfgFile string
@@ -56,6 +56,7 @@ var rootCmd = &cobra.Command{
 			GenCertVeryInsecure: viper.GetBool("gen-cert-very-insecure"),
 			DataDir:             viper.GetString("data-dir"),
 			Redownload:          viper.GetBool("redownload"),
+			SyncFromHeight:      viper.GetInt("sync-from-height"),
 			PingEnable:          viper.GetBool("ping-very-insecure"),
 			Darkside:            viper.GetBool("darkside-very-insecure"),
 			DarksideTimeout:     viper.GetUint64("darkside-timeout"),
@@ -235,11 +236,16 @@ func startServer(opts *common.Options) error {
 		os.Exit(1)
 	}
 
+	syncFromHeight := opts.SyncFromHeight
+	if opts.Redownload {
+		syncFromHeight = 0
+	}
+
 	// leveldb instances are safe for concurrent use.
 	db, err := leveldb.OpenFile(dbPath, nil)
 	defer db.Close()
 
-	cache := common.NewBlockCache(db, chainID, saplingHeight, opts.Redownload)
+	cache := common.NewBlockCache(db, chainID, saplingHeight, syncFromHeight)
 	if !opts.Darkside {
 		go common.BlockIngestor(cache, 0 /*loop forever*/)
 	} else {
@@ -325,6 +331,7 @@ func init() {
 	rootCmd.Flags().Bool("no-tls-very-insecure", false, "run without the required TLS certificate, only for debugging, DO NOT use in production")
 	rootCmd.Flags().Bool("gen-cert-very-insecure", false, "run with self-signed TLS certificate, only for debugging, DO NOT use in production")
 	rootCmd.Flags().Bool("redownload", false, "re-fetch all blocks from zcashd; reinitialize local cache files")
+	rootCmd.Flags().Int("sync-from-height", -1, "re-fetch blocks from zcashd start at this height")
 	rootCmd.Flags().String("data-dir", "/var/lib/lightwalletd", "data directory (such as db)")
 	rootCmd.Flags().Bool("ping-very-insecure", false, "allow Ping GRPC for testing")
 	rootCmd.Flags().Bool("darkside-very-insecure", false, "run with GRPC-controllable mock zcashd for integration testing (shuts down after 30 minutes)")
@@ -356,6 +363,8 @@ func init() {
 	viper.SetDefault("gen-cert-very-insecure", false)
 	viper.BindPFlag("redownload", rootCmd.Flags().Lookup("redownload"))
 	viper.SetDefault("redownload", false)
+	viper.BindPFlag("sync-from-height", rootCmd.Flags().Lookup("sync-from-height"))
+	viper.SetDefault("sync-from-height", -1)
 	viper.BindPFlag("data-dir", rootCmd.Flags().Lookup("data-dir"))
 	viper.SetDefault("data-dir", "/var/lib/lightwalletd")
 	viper.BindPFlag("ping-very-insecure", rootCmd.Flags().Lookup("ping-very-insecure"))
@@ -394,7 +403,7 @@ func initConfig() {
 	} else {
 		// Look in the current directory for a configuration file
 		viper.AddConfigPath(".")
-		// Viper auto appends extention to this config name
+		// Viper auto appends extension to this config name
 		// For example, lightwalletd.yml
 		viper.SetConfigName("lightwalletd")
 	}

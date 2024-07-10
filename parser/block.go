@@ -7,10 +7,10 @@ package parser
 
 import (
 	"fmt"
+    "errors"
 
-	"github.com/asherda/lightwalletd/parser/internal/bytestring"
-	"github.com/asherda/lightwalletd/walletrpc"
-	"github.com/pkg/errors"
+	"github.com/who-biz/lightwalletd/parser/internal/bytestring"
+	"github.com/who-biz/lightwalletd/walletrpc"
 )
 
 // Block represents a full block (not a compact block).
@@ -62,14 +62,14 @@ func (b *Block) GetDisplayPrevHash() []byte {
 // HasSaplingTransactions indicates if the block contains any Sapling tx.
 func (b *Block) HasSaplingTransactions() bool {
 	for _, tx := range b.vtx {
-		if tx.HasSaplingElements() {
+		if tx.HasShieldedElements() {
 			return true
 		}
 	}
 	return false
 }
 
-// see https://github.com/asherda/lightwalletd/issues/17#issuecomment-467110828
+// see https://github.com/zcash/lightwalletd/issues/17#issuecomment-467110828
 const genesisTargetDifficulty = 520617983
 
 // GetHeight extracts the block height from the coinbase transaction. See
@@ -109,16 +109,17 @@ func (b *Block) GetPrevHash() []byte {
 func (b *Block) ToCompact() *walletrpc.CompactBlock {
 	compactBlock := &walletrpc.CompactBlock{
 		//TODO ProtoVersion: 1,
-		Height:   uint64(b.GetHeight()),
-		PrevHash: b.hdr.HashPrevBlock,
-		Hash:     b.GetEncodableHash(),
-		Time:     b.hdr.Time,
+		Height:        uint64(b.GetHeight()),
+		PrevHash:      b.hdr.HashPrevBlock,
+		Hash:          b.GetEncodableHash(),
+		Time:          b.hdr.Time,
+		ChainMetadata: &walletrpc.ChainMetadata{},
 	}
 
 	// Only Sapling transactions have a meaningful compact encoding
 	saplingTxns := make([]*walletrpc.CompactTx, 0, len(b.vtx))
 	for idx, tx := range b.vtx {
-		if tx.HasSaplingElements() {
+		if tx.HasShieldedElements() {
 			saplingTxns = append(saplingTxns, tx.ToCompact(idx))
 		}
 	}
@@ -133,7 +134,7 @@ func (b *Block) ParseFromSlice(data []byte) (rest []byte, err error) {
 	hdr := NewBlockHeader()
 	data, err = hdr.ParseFromSlice(data)
 	if err != nil {
-		return nil, errors.Wrap(err, "parsing block header")
+		return nil, fmt.Errorf("parsing block header: %w", err)
 	}
 
 	s := bytestring.String(data)
@@ -149,7 +150,7 @@ func (b *Block) ParseFromSlice(data []byte) (rest []byte, err error) {
 		tx := NewTransaction()
 		data, err = tx.ParseFromSlice(data)
 		if err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("parsing transaction %d", i))
+			return nil, fmt.Errorf("error parsing transaction %d: %w", i, err)
 		}
 		vtx = append(vtx, tx)
 	}

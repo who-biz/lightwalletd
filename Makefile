@@ -14,24 +14,22 @@
  #
  # ************************************************************************/
 PROJECT_NAME := "lightwalletd"
-GO_FILES := $(shell find . -name '*.go' | grep -v /vendor/ | grep -v '*_test.go')
 GO_TEST_FILES := $(shell find . -name '*_test.go' -type f | rev | cut -d "/" -f2- | rev | sort -u)
-GO_BUILD_FILES := $(shell find . -name 'main.go')
 
 VERSION := `git describe --tags`
 GITCOMMIT := `git rev-parse HEAD`
 BUILDDATE := `date +%Y-%m-%d`
 BUILDUSER := `whoami`
-LDFLAGSSTRING :=-X github.com/asherda/lightwalletd/common.Version=$(VERSION)
-LDFLAGSSTRING +=-X github.com/asherda/lightwalletd/common.GitCommit=$(GITCOMMIT)
-LDFLAGSSTRING +=-X github.com/asherda/lightwalletd/common.Branch=$(BRANCH)
-LDFLAGSSTRING +=-X github.com/asherda/lightwalletd/common.BuildDate=$(BUILDDATE)
-LDFLAGSSTRING +=-X github.com/asherda/lightwalletd/common.BuildUser=$(BUILDUSER)
+LDFLAGSSTRING :=-X github.com/who-biz/lightwalletd/common.Version=$(VERSION)
+LDFLAGSSTRING +=-X github.com/who-biz/lightwalletd/common.GitCommit=$(GITCOMMIT)
+LDFLAGSSTRING +=-X github.com/who-biz/lightwalletd/common.Branch=$(BRANCH)
+LDFLAGSSTRING +=-X github.com/who-biz/lightwalletd/common.BuildDate=$(BUILDDATE)
+LDFLAGSSTRING +=-X github.com/who-biz/lightwalletd/common.BuildUser=$(BUILDUSER)
 LDFLAGS :=-ldflags "$(LDFLAGSSTRING)"
 
 # There are some files that are generated but are also in source control
 # (so that the average clone - build doesn't need the required tools)
-GENERATED_FILES := docs/rtd/index.html walletrpc/compact_formats.pb.go walletrpc/service.pb.go walletrpc/darkside.proto
+GENERATED_FILES := docs/rtd/index.html walletrpc/compact_formats.pb.go walletrpc/service.pb.go walletrpc/darkside.pb.go
 
 PWD := $(shell pwd)
 
@@ -59,7 +57,7 @@ test:
 
 # Run data race detector
 race:
-	GO111MODULE=on CGO_ENABLED=1 go test -v -race -short ./...
+	go test -v -race -short ./...
 
 # Run memory sanitizer (need to ensure proper build flag is set)
 msan:
@@ -110,7 +108,7 @@ docker_img:
 docker_img_run:
 	docker run -i --name zcashdlwd zcash_lwd_base
 
-# Execture a bash process on zcashdlwdcontainer
+# Execute a bash process on zcashdlwdcontainer
 docker_img_bash:
 	docker exec -it zcashdlwd bash
 
@@ -133,14 +131,13 @@ docker_remove_all:
 # Get dependencies
 dep:
 	@go get -v -d ./...
-	cd parser/verushash && mkdir "build" && cd build && cmake .. && make
 
 # Build binary
 build:
-	GO111MODULE=on go build $(LDFLAGS) 
+	go build $(LDFLAGS)
 
 build_rel:
-	GO111MODULE=on GOOS=linux go build $(LDFLAGS) 
+	go build $(LDFLAGS)
 
 # Install binaries into Go path
 install:
@@ -148,13 +145,12 @@ install:
 
 # Update your protoc, protobufs, grpc, .pb.go files
 update-grpc:
-	go get -u github.com/golang/protobuf/proto
-	go get -u github.com/golang/protobuf/protoc-gen-go
+	go get -u google.golang.org/protobuf
 	go get -u google.golang.org/grpc
 	cd walletrpc && protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative service.proto
 	cd walletrpc && protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative darkside.proto
 	cd walletrpc && protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative compact_formats.proto
-	go mod tidy && go mod vendor
+	go mod tidy
 
 clean:
 	@echo "clean project..."

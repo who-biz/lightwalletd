@@ -23,15 +23,19 @@ type darksideState struct {
 	branchID    string
 	chainName   string
 	cache       *BlockCache
-	mutex       sync.RWMutex
 
 	// This is the highest (latest) block height currently being presented
 	// by the mock zcashd.
 	latestHeight int
 
+	// Size of the Sapling commitment tree as of `startHeight - 1`.
+	startSaplingTreeSize uint32
+	// Size of the Orchard commitment tree as of `startHeight - 1`.
+	startOrchardTreeSize uint32
+
 	// These blocks (up to and including tip) are presented by mock zcashd.
 	// activeBlocks[0] is the block at height startHeight.
-	activeBlocks [][]byte // full blocks, binary, as from zcashd getblock rpc
+	activeBlocks []*activeBlock // full blocks, binary, as from zcashd getblock rpc
 
 	// Staged blocks are waiting to be applied (by ApplyStaged()) to activeBlocks.
 	// They are in order of arrival (not necessarily sorted by height), and are
@@ -49,18 +53,77 @@ type darksideState struct {
 
 	// Unordered list of replies
 	getAddressUtxos []ZcashdRpcReplyGetaddressutxos
+
+	stagedTreeStates       map[uint64]*DarksideTreeState
+	stagedTreeStatesByHash map[string]*DarksideTreeState
+
+	// This is a one-entry cache performance cheat.
+	cacheBlockHash  string
+	cacheBlockIndex int
+
+	// Cache of artificial z_getsubtreebyindex subtree entries,
+	// indexed by protocol (currently, sapling (0) or orchard (1)).
+	subtrees map[walletrpc.ShieldedProtocol]darksideProtocolSubtreeRoots
 }
 
 var state darksideState
 
+// mutex protects `state`; it's not within `state` because the
+// `state` can be reallocated (by Reset()), and that action
+// should be protected.
+var mutex sync.Mutex
+
+type activeBlock struct {
+	bytes           []byte
+	saplingTreeSize uint32
+	orchardTreeSize uint32
+}
+
 type stagedTx struct {
-	height int
-	bytes  []byte
+	height         int
+	saplingOutputs int
+	orchardActions int
+	bytes          []byte
+}
+
+type DarksideTreeState struct {
+	Network     string
+	Height      uint64
+	Hash        string
+	Time        uint32
+	SaplingTree string
+	OrchardTree string
+}
+
+type darksideSubtree struct {
+	root      []byte
+	endHash   []byte
+	endHeight int
+}
+type darksideProtocolSubtreeRoots struct {
+	startIndex uint32
+	subtrees   []darksideSubtree
 }
 
 // DarksideEnabled is true if --darkside-very-insecure was given on
 // the command line.
 var DarksideEnabled bool
+
+func darksideSetTxID(tx *parser.Transaction) {
+	// SHA256d
+	// This is correct for V4 transactions, but not for V5, but in this test
+	// environment, it's harmless (the incorrect txid calculation can't be
+	// detected). This will be fixed when lightwalletd calculates txids correctly .
+	digest := sha256.Sum256(tx.Bytes())
+	digest = sha256.Sum256(digest[:])
+	tx.SetTxID(digest[:])
+}
+
+func darksideSetBlockTxID(block *parser.Block) {
+	for _, tx := range block.Transactions() {
+		darksideSetTxID(tx)
+	}
+}
 
 // DarksideInit should be called once at startup in darksidewalletd mode.
 func DarksideInit(c *BlockCache, timeout int) {
@@ -76,20 +139,27 @@ func DarksideInit(c *BlockCache, timeout int) {
 
 // DarksideReset allows the wallet test code to specify values
 // that are returned by GetLightdInfo().
-func DarksideReset(sa int, bi, cn string) error {
-	Log.Info("Reset(saplingActivation=", sa, ")")
+func DarksideReset(sa int, bi, cn string, sst, sot uint32) error {
+	Log.Info("DarksideReset(saplingActivation=", sa, ")")
+	mutex.Lock()
+	defer mutex.Unlock()
 	stopIngestor()
 	state = darksideState{
-		resetted:             true,
-		startHeight:          sa,
-		latestHeight:         -1,
-		branchID:             bi,
-		chainName:            cn,
-		cache:                state.cache,
-		activeBlocks:         make([][]byte, 0),
-		stagedBlocks:         make([][]byte, 0),
-		incomingTransactions: make([][]byte, 0),
-		stagedTransactions:   make([]stagedTx, 0),
+		resetted:               true,
+		startHeight:            sa,
+		latestHeight:           -1,
+		branchID:               bi,
+		chainName:              cn,
+		startSaplingTreeSize:   sst,
+		startOrchardTreeSize:   sot,
+		cache:                  state.cache,
+		activeBlocks:           make([]*activeBlock, 0),
+		stagedBlocks:           make([][]byte, 0),
+		incomingTransactions:   make([][]byte, 0),
+		stagedTransactions:     make([]stagedTx, 0),
+		stagedTreeStates:       make(map[uint64]*DarksideTreeState),
+		stagedTreeStatesByHash: make(map[string]*DarksideTreeState),
+		subtrees:               make(map[walletrpc.ShieldedProtocol]darksideProtocolSubtreeRoots),
 	}
 	state.cache.Reset(sa)
 	return nil
@@ -117,17 +187,22 @@ func addBlockActive(blockBytes []byte) error {
 	}
 	// Drop the block that will be overwritten, and its children, then add block.
 	state.activeBlocks = state.activeBlocks[:blockHeight-state.startHeight]
-	state.activeBlocks = append(state.activeBlocks, blockBytes)
+	state.activeBlocks = append(state.activeBlocks,
+		&activeBlock{
+			bytes:           blockBytes,
+			saplingTreeSize: prevSaplingTreeSize + countSaplingOutputs(block),
+			orchardTreeSize: prevOrchardTreeSize + countOrchardActions(block),
+		})
 	return nil
 }
 
 // Set missing prev hashes of the blocks in the active chain
 func setPrevhash() {
 	var prevhash []byte
-	for _, blockBytes := range state.activeBlocks {
+	for _, activeBlock := range state.activeBlocks {
 		// Set this block's prevhash.
 		block := parser.NewBlock()
-		rest, err := block.ParseFromSlice(blockBytes)
+		rest, err := block.ParseFromSlice(activeBlock.bytes)
 		if err != nil {
 			Log.Fatal(err)
 		}
@@ -135,10 +210,10 @@ func setPrevhash() {
 			Log.Fatal(errors.New("block is too long"))
 		}
 		if prevhash != nil {
-			copy(blockBytes[4:4+32], prevhash)
+			copy(activeBlock.bytes[4:4+32], prevhash)
 		}
 		prevhash = block.GetEncodableHash()
-		Log.Info("active block height ", block.GetHeight(), " hash ",
+		Log.Info("Darkside active block height ", block.GetHeight(), " hash ",
 			hex.EncodeToString(block.GetDisplayHash()),
 			" txcount ", block.GetTxCount())
 	}
@@ -148,12 +223,12 @@ func setPrevhash() {
 // If this returns an error, the state could be weird; perhaps it may
 // be better to simply crash.
 func DarksideApplyStaged(height int) error {
-	state.mutex.Lock()
-	defer state.mutex.Unlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 	if !state.resetted {
 		return errors.New("please call Reset first")
 	}
-	Log.Info("ApplyStaged(height=", height, ")")
+	Log.Info("DarksideApplyStaged(height=", height, ")")
 	if height < state.startHeight {
 		return errors.New(fmt.Sprint("height ", height,
 			" is less than sapling activation height ", state.startHeight))
@@ -167,7 +242,7 @@ func DarksideApplyStaged(height int) error {
 		}
 	}
 	if len(state.activeBlocks) == 0 {
-		return errors.New("No active blocks after applying staged blocks")
+		return errors.New("no active blocks after applying staged blocks")
 	}
 
 	// Add staged transactions into blocks. Note we're not trying to
@@ -182,7 +257,7 @@ func DarksideApplyStaged(height int) error {
 		if tx.height >= state.startHeight+len(state.activeBlocks) {
 			return errors.New("transaction height too high")
 		}
-		block := state.activeBlocks[tx.height-state.startHeight]
+		block := state.activeBlocks[tx.height-state.startHeight].bytes
 		// The next one or 3 bytes encode the number of transactions to follow,
 		// little endian.
 		nTxFirstByte := block[1487]
@@ -210,11 +285,20 @@ func DarksideApplyStaged(height int) error {
 		}
 		block[68]++ // hack HashFinalSaplingRoot to mod the block hash
 		block = append(block, tx.bytes...)
-		state.activeBlocks[tx.height-state.startHeight] = block
+		state.activeBlocks[tx.height-state.startHeight].bytes = block
+		// Now increment this and every subsequent block's commitment tree sizes.
+		for _, b := range state.activeBlocks[tx.height-state.startHeight:] {
+			b.saplingTreeSize += uint32(tx.saplingOutputs)
+			b.orchardTreeSize += uint32(tx.orchardActions)
+		}
+	}
+	maxHeight := state.startHeight + len(state.activeBlocks) - 1
+	if height > maxHeight {
+		height = maxHeight
 	}
 	setPrevhash()
 	state.latestHeight = height
-	Log.Info("active blocks from ", state.startHeight,
+	Log.Info("darkside: active blocks from ", state.startHeight,
 		" to ", state.startHeight+len(state.activeBlocks)-1,
 		", latest presented height ", state.latestHeight)
 
@@ -230,7 +314,11 @@ func DarksideApplyStaged(height int) error {
 // DarksideGetIncomingTransactions returns all transactions we're
 // received via SendTransaction().
 func DarksideGetIncomingTransactions() [][]byte {
-	return state.incomingTransactions
+	var r [][]byte
+	mutex.Lock()
+	r = append(r, state.incomingTransactions...)
+	mutex.Unlock()
+	return r
 }
 
 // Add the serialized block to the staging list, but do some sanity checks first.
@@ -244,7 +332,7 @@ func darksideStageBlock(caller string, b []byte) error {
 	if len(rest) != 0 {
 		return errors.New("block serialization is too long")
 	}
-	Log.Info(caller, "(height=", block.GetHeight(), ")")
+	Log.Info(caller, "DarksideStageBlock(height=", block.GetHeight(), ")")
 	if block.GetHeight() < state.startHeight {
 		return errors.New(fmt.Sprint("block height ", block.GetHeight(),
 			" is less than sapling activation height ", state.startHeight))
@@ -256,10 +344,12 @@ func darksideStageBlock(caller string, b []byte) error {
 // DarksideStageBlocks opens and reads blocks from the given URL and
 // adds them to the staging area.
 func DarksideStageBlocks(url string) error {
+	mutex.Lock()
+	defer mutex.Unlock()
 	if !state.resetted {
 		return errors.New("please call Reset first")
 	}
-	Log.Info("StageBlocks(url=", url, ")")
+	Log.Info("DarksideStageBlocks(url=", url, ")")
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -289,10 +379,12 @@ func DarksideStageBlocks(url string) error {
 
 // DarksideStageBlockStream adds the block to the staging area
 func DarksideStageBlockStream(blockHex string) error {
+	mutex.Lock()
+	defer mutex.Unlock()
 	if !state.resetted {
 		return errors.New("please call Reset first")
 	}
-	Log.Info("StageBlocksStream()")
+	Log.Info("DarksideStageBlocksStream()")
 	blockBytes, err := hex.DecodeString(blockHex)
 	if err != nil {
 		return err
@@ -305,10 +397,12 @@ func DarksideStageBlockStream(blockHex string) error {
 
 // DarksideStageBlocksCreate creates empty blocks and adds them to the staging area.
 func DarksideStageBlocksCreate(height int32, nonce int32, count int32) error {
+	mutex.Lock()
+	defer mutex.Unlock()
 	if !state.resetted {
 		return errors.New("please call Reset first")
 	}
-	Log.Info("StageBlocksCreate(height=", height, ", nonce=", nonce, ", count=", count, ")")
+	Log.Info("DarksideStageBlocksCreate(height=", height, ", nonce=", nonce, ", count=", count, ")")
 	for i := 0; i < int(count); i++ {
 
 		fakeCoinbase := "0400008085202f890100000000000000000000000000000000000000000000000000" +
@@ -363,55 +457,130 @@ func DarksideStageBlocksCreate(height int32, nonce int32, count int32) error {
 
 // DarksideClearIncomingTransactions empties the incoming transaction list.
 func DarksideClearIncomingTransactions() {
+	mutex.Lock()
 	state.incomingTransactions = make([][]byte, 0)
+	mutex.Unlock()
 }
 
 func darksideRawRequest(method string, params []json.RawMessage) (json.RawMessage, error) {
+	mutex.Lock()
+	defer mutex.Unlock()
 	switch method {
 	case "getblockchaininfo":
+		if len(state.activeBlocks) == 0 {
+			return nil, errors.New("GetLightdInfo requires at least one block, " +
+				"please stage and apply one or more blocks.")
+		}
+		index := state.latestHeight - state.startHeight
+		block := parser.NewBlock()
+		block.ParseFromSlice(state.activeBlocks[index].bytes)
+		hash := hex.EncodeToString(block.GetDisplayHash())
 		blockchaininfo := &ZcashdRpcReplyGetblockchaininfo{
 			Chain: state.chainName,
 			Upgrades: map[string]Upgradeinfo{
 				"76b809bb": {ActivationHeight: state.startHeight},
 			},
-			Blocks:    state.latestHeight,
-			Consensus: ConsensusInfo{state.branchID, state.branchID},
+			Blocks:        state.latestHeight,
+			Consensus:     ConsensusInfo{state.branchID, state.branchID},
+			BestBlockHash: hash,
 		}
 		return json.Marshal(blockchaininfo)
 
 	case "getinfo":
-		info := &ZcashdRpcReplyGetinfo{}
+		info := &ZcashdRpcReplyGetinfo{
+			Build:      "darksidewallet-build",
+			Subversion: "darksidewallet-subversion",
+		}
 		return json.Marshal(info)
 
 	case "getblock":
-		var heightStr string
-		err := json.Unmarshal(params[0], &heightStr)
+		var heightOrHashStr string
+		err := json.Unmarshal(params[0], &heightOrHashStr)
 		if err != nil {
 			return nil, errors.New("failed to parse getblock request")
 		}
+		var blockIndex int
+		if len(heightOrHashStr) < 64 {
+			// argument is a height
+			height, err := strconv.Atoi(heightOrHashStr)
+			if err != nil {
+				return nil, errors.New("error parsing height as integer")
+			}
+			const notFoundErr = "-8:"
+			if len(state.activeBlocks) == 0 {
+				return nil, errors.New(notFoundErr)
+			}
+			if height > state.latestHeight {
+				return nil, errors.New(notFoundErr)
+			}
+			if height < state.startHeight {
+				return nil, errors.New(fmt.Sprint("getblock: requesting height ", height,
+					" is less than sapling activation height"))
+			}
+			blockIndex = height - state.startHeight
+			if blockIndex >= len(state.activeBlocks) {
+				return nil, errors.New(notFoundErr)
+			}
+		} else {
+			// argument is a block hash
+			if state.cacheBlockHash == heightOrHashStr {
+				// There is a good chance we'll take this path, much faster than
+				// iterating the activeBlocks list.
+				blockIndex = state.cacheBlockIndex
+			} else {
+				var b *activeBlock
+				for blockIndex, b = range state.activeBlocks {
+					block := parser.NewBlock()
+					block.ParseFromSlice(b.bytes)
+					if heightOrHashStr == hex.EncodeToString(block.GetDisplayHash()) {
+						break
+					}
+				}
+				if blockIndex >= len(state.activeBlocks) {
+					return nil, errors.New(fmt.Sprint("getblock: hash ", heightOrHashStr,
+						" not found"))
+				}
+			}
+		}
+		if len(params) > 1 && string(params[1]) == "1" {
+			// verbose mode, all that's currently needed is txid
+			block := parser.NewBlock()
+			block.ParseFromSlice(state.activeBlocks[blockIndex].bytes)
+			darksideSetBlockTxID(block)
+			var r struct {
+				Tx    []string `json:"tx"`
+				Hash  string   `json:"hash"`
+				Trees struct {
+					Sapling struct {
+						Size uint32
+					}
+					Orchard struct {
+						Size uint32
+					}
+				}
+			}
+			r.Tx = make([]string, 0)
+			for _, tx := range block.Transactions() {
+				r.Tx = append(r.Tx, hex.EncodeToString(tx.GetDisplayHash()))
+			}
+			r.Hash = hex.EncodeToString(block.GetDisplayHash())
+			r.Trees.Sapling.Size = state.activeBlocks[blockIndex].saplingTreeSize
+			r.Trees.Orchard.Size = state.activeBlocks[blockIndex].orchardTreeSize
+			state.cacheBlockHash = r.Hash
+			state.cacheBlockIndex = blockIndex
+			return json.Marshal(r)
+		}
+		return json.Marshal(hex.EncodeToString(state.activeBlocks[blockIndex].bytes))
 
-		height, err := strconv.Atoi(heightStr)
-		if err != nil {
-			return nil, errors.New("error parsing height as integer")
-		}
-		state.mutex.RLock()
-		defer state.mutex.RUnlock()
-		const notFoundErr = "-8:"
+	case "getbestblockhash":
 		if len(state.activeBlocks) == 0 {
-			return nil, errors.New(notFoundErr)
+			Log.Fatal("getbestblockhash: no blocks")
 		}
-		if height > state.latestHeight {
-			return nil, errors.New(notFoundErr)
-		}
-		if height < state.startHeight {
-			return nil, errors.New(fmt.Sprint("getblock: requesting height ", height,
-				" is less than sapling activation height"))
-		}
-		index := height - state.startHeight
-		if index >= len(state.activeBlocks) {
-			return nil, errors.New(notFoundErr)
-		}
-		return json.Marshal(hex.EncodeToString(state.activeBlocks[index]))
+		index := state.latestHeight - state.startHeight
+		block := parser.NewBlock()
+		block.ParseFromSlice(state.activeBlocks[index].bytes)
+		hash := hex.EncodeToString(block.GetDisplayHash())
+		return json.Marshal(hash)
 
 	case "getaddresstxids":
 		// Not required for minimal reorg testing.
@@ -439,6 +608,7 @@ func darksideRawRequest(method string, params []json.RawMessage) (json.RawMessag
 		if len(rest) != 0 {
 			return nil, errors.New("transaction serialization is too long")
 		}
+		darksideSetTxID(tx)
 		state.incomingTransactions = append(state.incomingTransactions, txBytes)
 
 		return []byte(hex.EncodeToString(tx.GetDisplayHash())), nil
@@ -448,6 +618,7 @@ func darksideRawRequest(method string, params []json.RawMessage) (json.RawMessag
 		addTxToReply := func(txBytes []byte) {
 			ctx := parser.NewTransaction()
 			ctx.ParseFromSlice(txBytes)
+			darksideSetTxID(ctx)
 			reply = append(reply, hex.EncodeToString(ctx.GetDisplayHash()))
 		}
 		for _, blockBytes := range state.stagedBlocks {
@@ -479,9 +650,78 @@ func darksideRawRequest(method string, params []json.RawMessage) (json.RawMessag
 		}
 		return json.Marshal(utxosReply)
 
+	case "z_gettreestate":
+		var heightOrHashStr string
+		err := json.Unmarshal(params[0], &heightOrHashStr)
+		if err != nil {
+			return nil, errors.New("failed to parse z_gettreestate request")
+		}
+		var treeState *DarksideTreeState
+		if len(heightOrHashStr) < 64 {
+			// argument is a height
+			height, err := strconv.Atoi(heightOrHashStr)
+			if err != nil {
+				return nil, errors.New("error parsing height as integer")
+			}
+			treeState = state.stagedTreeStates[uint64(height)]
+		} else {
+			treeState = state.stagedTreeStatesByHash[heightOrHashStr]
+		}
+		if treeState == nil {
+			return nil, errors.New(fmt.Sprint(
+				"No TreeState exists for the given height or block hash. " +
+					"Stage it using AddTreeState() first"))
+		}
+
+		zcashdTreeState := &ZcashdRpcReplyGettreestate{}
+
+		zcashdTreeState.Hash = treeState.Hash
+		zcashdTreeState.Height = int(treeState.Height)
+		zcashdTreeState.Time = treeState.Time
+		zcashdTreeState.Sapling.Commitments.FinalState = treeState.SaplingTree
+
+		if treeState.OrchardTree != "" {
+			zcashdTreeState.Orchard.Commitments.FinalState = treeState.OrchardTree
+		}
+
+		return json.Marshal(zcashdTreeState)
+
+	case "z_getsubtreesbyindex":
+		// This is implemented by DarksideGetSubtreeRoots().
+		return nil, errors.New("z_getsubtreesbyindex should never be called")
+
 	default:
-		return nil, errors.New("there was an attempt to call an unsupported RPC")
+		return nil, errors.New("there was an attempt to call an unsupported RPC: " + method)
 	}
+}
+
+// Normally we would implement this functionality in the darksideRawRequest(), but this
+// gRPC handler requires calling GetBlock, and we don't have a good way to fake that.
+func DarksideGetSubtreeRoots(arg *walletrpc.GetSubtreeRootsArg, resp walletrpc.CompactTxStreamer_GetSubtreeRootsServer) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+	subtrees := state.subtrees[arg.ShieldedProtocol]
+	if arg.StartIndex < subtrees.startIndex {
+		return errors.New("startIndex too low")
+	}
+	sliceIndex := arg.StartIndex - subtrees.startIndex
+	var limit int = len(subtrees.subtrees) - int(sliceIndex)
+	if limit > int(arg.MaxEntries) {
+		limit = int(arg.MaxEntries)
+	}
+	for i := 0; i < limit; i++ {
+		s := subtrees.subtrees[int(sliceIndex)+i]
+		r := walletrpc.SubtreeRoot{
+			RootHash:              s.root,
+			CompletingBlockHash:   s.endHash,
+			CompletingBlockHeight: uint64(s.endHeight),
+		}
+		err := resp.Send(&r)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func darksideGetRawTransaction(params []json.RawMessage) (json.RawMessage, error) {
@@ -518,20 +758,37 @@ func darksideGetRawTransaction(params []json.RawMessage) (json.RawMessage, error
 	// Linear search for the tx, somewhat inefficient but this is test code
 	// and there aren't many blocks. If this becomes a performance problem,
 	// we can maintain a map of transactions indexed by txid.
+	findTxInBlock := func(b []byte) json.RawMessage {
+		block := parser.NewBlock()
+		_, _ = block.ParseFromSlice(b)
+		darksideSetBlockTxID(block)
+		for _, tx := range block.Transactions() {
+			if bytes.Equal(tx.GetDisplayHash(), txid) {
+				return marshalReply(tx, block.GetHeight())
+			}
+		}
+		return nil
+	}
+	findTxInActiveBlocks := func(blocks []*activeBlock) json.RawMessage {
+		for _, b := range blocks {
+			ret := findTxInBlock(b.bytes)
+			if ret != nil {
+				return ret
+			}
+		}
+		return nil
+	}
 	findTxInBlocks := func(blocks [][]byte) json.RawMessage {
 		for _, b := range blocks {
-			block := parser.NewBlock()
-			_, _ = block.ParseFromSlice(b)
-			for _, tx := range block.Transactions() {
-				if bytes.Equal(tx.GetDisplayHash(), txid) {
-					return marshalReply(tx, block.GetHeight())
-				}
+			ret := findTxInBlock(b)
+			if ret != nil {
+				return ret
 			}
 		}
 		return nil
 	}
 	// Search for the transaction (by txid) in the 3 places it could be.
-	reply := findTxInBlocks(state.activeBlocks)
+	reply := findTxInActiveBlocks(state.activeBlocks)
 	if reply != nil {
 		return reply, nil
 	}
@@ -542,6 +799,7 @@ func darksideGetRawTransaction(params []json.RawMessage) (json.RawMessage, error
 	for _, stx := range state.stagedTransactions {
 		tx := parser.NewTransaction()
 		_, _ = tx.ParseFromSlice(stx.bytes)
+		darksideSetTxID(tx)
 		if bytes.Equal(tx.GetDisplayHash(), txid) {
 			return marshalReply(tx, 0), nil
 		}
@@ -550,7 +808,7 @@ func darksideGetRawTransaction(params []json.RawMessage) (json.RawMessage, error
 }
 
 // DarksideStageTransaction adds the given transaction to the staging area.
-func DarksideStageTransaction(height int, txBytes []byte) error {
+func stageTransaction(height int, txBytes []byte) error {
 	if !state.resetted {
 		return errors.New("please call Reset first")
 	}
@@ -565,19 +823,30 @@ func DarksideStageTransaction(height int, txBytes []byte) error {
 	}
 	state.stagedTransactions = append(state.stagedTransactions,
 		stagedTx{
-			height: height,
-			bytes:  txBytes,
+			height:         height,
+			saplingOutputs: tx.SaplingOutputsCount(),
+			orchardActions: tx.OrchardActionsCount(),
+			bytes:          txBytes,
 		})
 	return nil
+}
+
+// DarksideStageTransaction adds the given transaction to the staging area.
+func DarksideStageTransaction(height int, txBytes []byte) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+	return stageTransaction(height, txBytes)
 }
 
 // DarksideStageTransactionsURL reads a list of transactions (hex-encoded, one
 // per line) from the given URL, and associates them with the given height.
 func DarksideStageTransactionsURL(height int, url string) error {
+	mutex.Lock()
+	defer mutex.Unlock()
 	if !state.resetted {
 		return errors.New("please call Reset first")
 	}
-	Log.Info("StageTransactionsURL(height=", height, ", url=", url, ")")
+	Log.Info("DarksideStageTransactionsURL(height=", height, ", url=", url, ")")
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -598,20 +867,81 @@ func DarksideStageTransactionsURL(height int, url string) error {
 		if err != nil {
 			return err
 		}
-		if err = DarksideStageTransaction(height, transactionBytes); err != nil {
+		if err = stageTransaction(height, transactionBytes); err != nil {
 			return err
 		}
 	}
 	return scan.Err()
-
 }
 
 func DarksideAddAddressUtxo(arg ZcashdRpcReplyGetaddressutxos) error {
+	mutex.Lock()
 	state.getAddressUtxos = append(state.getAddressUtxos, arg)
+	mutex.Unlock()
 	return nil
 }
 
 func DarksideClearAddressUtxos() error {
+	mutex.Lock()
 	state.getAddressUtxos = nil
+	mutex.Unlock()
+	return nil
+}
+
+func DarksideClearAllTreeStates() error {
+	mutex.Lock()
+	state.stagedTreeStates = make(map[uint64]*DarksideTreeState)
+	mutex.Unlock()
+	return nil
+}
+
+func DarksideAddTreeState(arg DarksideTreeState) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+	if !state.resetted || state.stagedTreeStates == nil {
+		return errors.New("please call Reset first")
+	}
+
+	state.stagedTreeStates[arg.Height] = &arg
+	state.stagedTreeStatesByHash[arg.Hash] = &arg
+	return nil
+}
+
+func DarksideRemoveTreeState(arg *walletrpc.BlockID) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+	if !state.resetted || state.stagedTreeStates == nil {
+		return errors.New("please call Reset first")
+	}
+	if arg.Height > 0 {
+		treestate := state.stagedTreeStates[arg.Height]
+		delete(state.stagedTreeStatesByHash, treestate.Hash)
+		delete(state.stagedTreeStates, treestate.Height)
+	} else {
+		h := hex.EncodeToString(arg.Hash)
+		treestate := state.stagedTreeStatesByHash[h]
+		delete(state.stagedTreeStatesByHash, treestate.Hash)
+		delete(state.stagedTreeStates, treestate.Height)
+	}
+	return nil
+}
+
+func DarksideSetSubtreeRoots(arg_subtrees *walletrpc.DarksideSubtreeRoots) error {
+	mutex.Lock()
+	defer mutex.Unlock()
+	if !state.resetted {
+		return errors.New("please call Reset first")
+	}
+	state.subtrees[arg_subtrees.ShieldedProtocol] = darksideProtocolSubtreeRoots{
+		startIndex: arg_subtrees.StartIndex,
+		subtrees:   make([]darksideSubtree, len(arg_subtrees.SubtreeRoots)),
+	}
+	for i := 0; i < len(arg_subtrees.SubtreeRoots); i++ {
+		s := &state.subtrees[arg_subtrees.ShieldedProtocol].subtrees[i]
+		arg := arg_subtrees.SubtreeRoots[i]
+		s.root = arg.RootHash
+		s.endHeight = int(arg.CompletingBlockHeight)
+		s.endHash = arg.CompletingBlockHash
+	}
 	return nil
 }

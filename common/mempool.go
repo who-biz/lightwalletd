@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asherda/lightwalletd/walletrpc"
+	"github.com/who-bi/lightwalletd/walletrpc"
 )
 
 type txid string
@@ -46,7 +46,7 @@ func GetMempool(sendToClient func(*walletrpc.RawTransaction) error) error {
 		// Don't fetch the mempool more often than every 2 seconds.
 		now := Time.Now()
 		if now.After(g_lastTime.Add(2 * time.Second)) {
-			blockChainInfo, err := getLatestBlockChainInfo()
+			blockChainInfo, err := GetBlockChainInfo()
 			if err != nil {
 				g_lock.Unlock()
 				return err
@@ -140,17 +140,4 @@ func refreshMempoolTxns() error {
 		g_txList = append(g_txList, newRtx)
 	}
 	return nil
-}
-
-func getLatestBlockChainInfo() (*ZcashdRpcReplyGetblockchaininfo, error) {
-	result, rpcErr := RawRequest("getblockchaininfo", []json.RawMessage{})
-	if rpcErr != nil {
-		return nil, rpcErr
-	}
-	var getblockchaininfoReply ZcashdRpcReplyGetblockchaininfo
-	err := json.Unmarshal(result, &getblockchaininfoReply)
-	if err != nil {
-		return nil, err
-	}
-	return &getblockchaininfoReply, nil
 }

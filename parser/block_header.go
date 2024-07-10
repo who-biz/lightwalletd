@@ -7,12 +7,13 @@ package parser
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
-	"github.com/asherda/lightwalletd/parser/internal/bytestring"
-	"github.com/asherda/lightwalletd/parser/verushash"
-
-	"github.com/pkg/errors"
+	"errors"
 	"math/big"
+
+	"github.com/who-biz/lightwalletd/parser/internal/bytestring"
+	"github.com/who-biz/lightwalletd/parser/verushash"
 )
 
 const (

@@ -12,6 +12,8 @@ message DarksideMetaState {
     int32 saplingActivation = 1;
     string branchID = 2;
     string chainName = 3;
+    uint32 startSaplingCommitmentTreeSize = 4;
+    uint32 startOrchardCommitmentTreeSize = 5;
 }
 
 // A block is a hex-encoded string.
@@ -41,6 +43,12 @@ message DarksideEmptyBlocks {
     int32 height = 1;
     int32 nonce = 2;
     int32 count = 3;
+}
+
+message DarksideSubtreeRoots {
+    ShieldedProtocol shieldedProtocol = 1;
+    uint32 startIndex = 2;
+    repeated SubtreeRoot subtreeRoots = 3;
 }
 
 // Darksidewalletd maintains two staging areas, blocks and transactions. The
@@ -121,4 +129,17 @@ service DarksideStreamer {
 
     // Clear the list of GetAddressUtxos entries (can't fail)
     rpc ClearAddressUtxo(Empty) returns (Empty) {}
+
+    // Adds a GetTreeState to the tree state cache
+    rpc AddTreeState(TreeState) returns (Empty) {}
+
+    // Removes a GetTreeState for the given height from cache if present (can't fail)
+    rpc RemoveTreeState(BlockID) returns (Empty) {}
+
+    // Clear the list of GetTreeStates entries (can't fail)
+    rpc ClearAllTreeStates(Empty) returns (Empty) {}
+
+    // Sets the subtree roots cache (for GetSubtreeRoots),
+    // replacing any existing entries
+    rpc SetSubtreeRoots(DarksideSubtreeRoots) returns (Empty) {}
 }

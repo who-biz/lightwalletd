@@ -5,16 +5,19 @@
 package frontend
 
 import (
+	"errors"
+	"fmt"
 	"net"
+	"path/filepath"
 
-	"github.com/asherda/lightwalletd/common"
+	"github.com/BurntSushi/toml"
+	"github.com/whio-biz/lightwalletd/common"
 	"github.com/btcsuite/btcd/rpcclient"
-	"github.com/pkg/errors"
 	ini "gopkg.in/ini.v1"
 )
 
 // NewZRPCFromConf reads the zcashd configuration file.
-func NewZRPCFromConf(confPath interface{}) (*rpcclient.Client, error) {
+func NewZRPCFromConf(confPath string) (*rpcclient.Client, error) {
 	connCfg, err := connFromConf(confPath)
 	if err != nil {
 		return nil, err
@@ -35,12 +38,18 @@ func NewZRPCFromFlags(opts *common.Options) (*rpcclient.Client, error) {
 	return rpcclient.New(connCfg, nil)
 }
 
-// If passed a string, interpret as a path, open and read; if passed
-// a byte slice, interpret as the config file content (used in testing).
-func connFromConf(confPath interface{}) (*rpcclient.ConnConfig, error) {
+func connFromConf(confPath string) (*rpcclient.ConnConfig, error) {
+	if filepath.Ext(confPath) == ".toml" {
+		return connFromToml(confPath)
+	} else {
+		return connFromIni(confPath)
+	}
+}
+
+func connFromIni(confPath string) (*rpcclient.ConnConfig, error) {
 	cfg, err := ini.Load(confPath)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read config file")
+		return nil, fmt.Errorf("failed to read config file in .conf format: %w", err)
 	}
 
 	rpcaddr := cfg.Section("").Key("rpcbind").String()
@@ -59,6 +68,10 @@ func connFromConf(confPath interface{}) (*rpcclient.ConnConfig, error) {
 	username := cfg.Section("").Key("rpcuser").String()
 	password := cfg.Section("").Key("rpcpassword").String()
 
+	//if password == "" {
+	//	return nil, errors.New("rpcpassword not found (or empty), please add rpcpassword= to zcash.conf")
+	//}
+
 	// Connect to local Zcash RPC server using HTTP POST mode.
 	connCfg := &rpcclient.ConnConfig{
 		Host:         net.JoinHostPort(rpcaddr, rpcport),
@@ -70,4 +83,31 @@ func connFromConf(confPath interface{}) (*rpcclient.ConnConfig, error) {
 	// Notice the notification parameter is nil since notifications are
 	// not supported in HTTP POST mode.
 	return connCfg, nil
+}
+
+// If passed a string, interpret as a path, open and read; if passed
+// a byte slice, interpret as the config file content (used in testing).
+func connFromToml(confPath string) (*rpcclient.ConnConfig, error) {
+	var tomlConf struct {
+		Rpc struct {
+			Listen_addr string
+			RPCUser     string
+			RPCPassword string
+		}
+	}
+	_, err := toml.DecodeFile(confPath, &tomlConf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file in .toml format: %w", err)
+	}
+	conf := rpcclient.ConnConfig{
+		Host:         tomlConf.Rpc.Listen_addr,
+		User:         tomlConf.Rpc.RPCUser,
+		Pass:         tomlConf.Rpc.RPCPassword,
+		HTTPPostMode: true, // Zcash only supports HTTP POST mode
+		DisableTLS:   true, // Zcash does not provide TLS by default
+	}
+
+	// Notice the notification parameter is nil since notifications are
+	// not supported in HTTP POST mode.
+	return &conf, nil
 }
