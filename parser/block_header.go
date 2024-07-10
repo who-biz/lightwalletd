@@ -7,7 +7,7 @@ package parser
 
 import (
 	"bytes"
-	"crypto/sha256"
+//	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"math/big"

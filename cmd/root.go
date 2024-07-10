@@ -236,16 +236,16 @@ func startServer(opts *common.Options) error {
 		os.Exit(1)
 	}
 
-	syncFromHeight := opts.SyncFromHeight
-	if opts.Redownload {
-		syncFromHeight = 0
-	}
+	//syncFromHeight := opts.SyncFromHeight
+	//if opts.Redownload {
+	//	syncFromHeight = 0
+	//}
 
 	// leveldb instances are safe for concurrent use.
 	db, err := leveldb.OpenFile(dbPath, nil)
 	defer db.Close()
 
-	cache := common.NewBlockCache(db, chainID, saplingHeight, syncFromHeight)
+	cache := common.NewBlockCache(db, chainID, saplingHeight, opts.Redownload)
 	if !opts.Darkside {
 		go common.BlockIngestor(cache, 0 /*loop forever*/)
 	} else {

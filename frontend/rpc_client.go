@@ -5,7 +5,7 @@
 package frontend
 
 import (
-	"errors"
+//	"errors"
 	"fmt"
 	"net"
 	"path/filepath"
