@@ -343,8 +343,8 @@ func (p *action) ToCompact() *walletrpc.CompactOrchardAction {
 // Transaction encodes a full (zcashd) transaction.
 type Transaction struct {
 	*rawTransaction
-	rawBytes   []byte
-	cachedTxID []byte // cached for performance
+	rawBytes []byte
+	txID     []byte // from getblock verbose=1
 }
 
 func (tx *Transaction) SetTxID(txid []byte) {
@@ -353,16 +353,16 @@ func (tx *Transaction) SetTxID(txid []byte) {
 
 // GetDisplayHash returns the transaction hash in big-endian display order.
 func (tx *Transaction) GetDisplayHash() []byte {
-	if tx.cachedTxID != nil {
-		return tx.cachedTxID
+	if tx.txID != nil {
+		return tx.txID
 	}
 
 	// SHA256d
 	digest := sha256.Sum256(tx.rawBytes)
 	digest = sha256.Sum256(digest[:])
 	// Convert to big-endian
-	tx.cachedTxID = Reverse(digest[:])
-	return tx.cachedTxID
+	tx.txID = Reverse(digest[:])
+	return tx.txID
 }
 
 // GetEncodableHash returns the transaction hash in little-endian wire format order.
