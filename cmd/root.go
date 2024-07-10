@@ -26,7 +26,7 @@ import (
 	"github.com/who-biz/lightwalletd/common"
 	"github.com/who-biz/lightwalletd/common/logging"
 	"github.com/who-biz/lightwalletd/frontend"
-	"github.com/who-/lightwalletd/walletrpc"
+	"github.com/who-biz/lightwalletd/walletrpc"
 )
 
 var cfgFile string

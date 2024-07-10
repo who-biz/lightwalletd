@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
-	"github.com/whio-biz/lightwalletd/common"
+	"github.com/who-biz/lightwalletd/common"
 	"github.com/btcsuite/btcd/rpcclient"
 	ini "gopkg.in/ini.v1"
 )
