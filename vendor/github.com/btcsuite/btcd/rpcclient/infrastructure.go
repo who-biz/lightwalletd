@@ -19,12 +19,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/btcsuite/btcd/btcjson"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/btcsuite/websocket"
 )
@@ -84,15 +85,11 @@ const (
 	// connectionRetryInterval is the amount of time to wait in between
 	// retries when automatically reconnecting to an RPC server.
 	connectionRetryInterval = time.Second * 5
-)
 
-// sendPostDetails houses an HTTP POST request to send to an RPC server as well
-// as the original JSON-RPC command and a channel to reply on when the server
-// responds with the result.
-type sendPostDetails struct {
-	httpRequest *http.Request
-	jsonRequest *jsonRequest
-}
+	// requestRetryInterval is the initial amount of time to wait in between
+	// retries when sending HTTP POST requests.
+	requestRetryInterval = time.Millisecond * 500
+)
 
 // jsonRequest holds information about a json request that is used to properly
 // detect, interpret, and deliver a reply to it.
@@ -101,24 +98,8 @@ type jsonRequest struct {
 	method         string
 	cmd            interface{}
 	marshalledJSON []byte
-	responseChan   chan *response
+	responseChan   chan *Response
 }
-
-// BackendVersion represents the version of the backend the client is currently
-// connected to.
-type BackendVersion uint8
-
-const (
-	// BitcoindPre19 represents a bitcoind version before 0.19.0.
-	BitcoindPre19 BackendVersion = iota
-
-	// BitcoindPost19 represents a bitcoind version equal to or greater than
-	// 0.19.0.
-	BitcoindPost19
-
-	// Btcd represents a catch-all btcd version.
-	Btcd
-)
 
 // Client represents a Bitcoin RPC client which allows easy access to the
 // various RPC methods available on a Bitcoin RPC server.  Each of the wrapper
@@ -135,8 +116,12 @@ const (
 type Client struct {
 	id uint64 // atomic, so must stay 64-bit aligned
 
-	// config holds the connection configuration assoiated with this client.
+	// config holds the connection configuration associated with this client.
 	config *ConnConfig
+
+	// chainParams holds the params for the chain that this client is using,
+	// and is used for many wallet methods.
+	chainParams *chaincfg.Params
 
 	// wsConn is the underlying websocket connection when not in HTTP POST
 	// mode.
@@ -149,13 +134,17 @@ type Client struct {
 	// backendVersion is the version of the backend the client is currently
 	// connected to. This should be retrieved through GetVersion.
 	backendVersionMu sync.Mutex
-	backendVersion   *BackendVersion
+	backendVersion   BackendVersion
 
 	// mtx is a mutex to protect access to connection related fields.
 	mtx sync.Mutex
 
 	// disconnected indicated whether or not the server is disconnected.
 	disconnected bool
+
+	// whether or not to batch requests, false unless changed by Batch()
+	batch     bool
+	batchList *list.List
 
 	// retryCount holds the number of times the client has tried to
 	// reconnect to the RPC server.
@@ -173,7 +162,7 @@ type Client struct {
 
 	// Networking infrastructure.
 	sendChan        chan []byte
-	sendPostChan    chan *sendPostDetails
+	sendPostChan    chan *jsonRequest
 	connEstablished chan struct{}
 	disconnect      chan struct{}
 	shutdown        chan struct{}
@@ -214,8 +203,13 @@ func (c *Client) addRequest(jReq *jsonRequest) error {
 	default:
 	}
 
-	element := c.requestList.PushBack(jReq)
-	c.requestMap[jReq.id] = element
+	if !c.batch {
+		element := c.requestList.PushBack(jReq)
+		c.requestMap[jReq.id] = element
+	} else {
+		element := c.batchList.PushBack(jReq)
+		c.requestMap[jReq.id] = element
+	}
 	return nil
 }
 
@@ -228,14 +222,21 @@ func (c *Client) removeRequest(id uint64) *jsonRequest {
 	c.requestLock.Lock()
 	defer c.requestLock.Unlock()
 
-	element := c.requestMap[id]
-	if element != nil {
-		delete(c.requestMap, id)
-		request := c.requestList.Remove(element).(*jsonRequest)
-		return request
+	element, ok := c.requestMap[id]
+	if !ok {
+		return nil
 	}
 
-	return nil
+	delete(c.requestMap, id)
+
+	var request *jsonRequest
+	if c.batch {
+		request = c.batchList.Remove(element).(*jsonRequest)
+	} else {
+		request = c.requestList.Remove(element).(*jsonRequest)
+	}
+
+	return request
 }
 
 // removeAllRequests removes all the jsonRequests which contain the response
@@ -283,41 +284,74 @@ func (c *Client) trackRegisteredNtfns(cmd interface{}) {
 	}
 }
 
-type (
-	// inMessage is the first type that an incoming message is unmarshaled
-	// into. It supports both requests (for notification support) and
-	// responses.  The partially-unmarshaled message is a notification if
-	// the embedded ID (from the response) is nil.  Otherwise, it is a
-	// response.
-	inMessage struct {
-		ID *float64 `json:"id"`
-		*rawNotification
-		*rawResponse
+// FutureGetBulkResult waits for the responses promised by the future
+// and returns them in a channel
+type FutureGetBulkResult chan *Response
+
+// Receive waits for the response promised by the future and returns an map
+// of results by request id
+func (r FutureGetBulkResult) Receive() (BulkResult, error) {
+	m := make(BulkResult)
+	res, err := ReceiveFuture(r)
+	if err != nil {
+		return nil, err
+	}
+	var arr []IndividualBulkResult
+	err = json.Unmarshal(res, &arr)
+	if err != nil {
+		return nil, err
 	}
 
-	// rawNotification is a partially-unmarshaled JSON-RPC notification.
-	rawNotification struct {
-		Method string            `json:"method"`
-		Params []json.RawMessage `json:"params"`
+	for _, results := range arr {
+		m[results.Id] = results
 	}
 
-	// rawResponse is a partially-unmarshaled JSON-RPC response.  For this
-	// to be valid (according to JSON-RPC 1.0 spec), ID may not be nil.
-	rawResponse struct {
-		Result json.RawMessage   `json:"result"`
-		Error  *btcjson.RPCError `json:"error"`
-	}
-)
+	return m, nil
+}
 
-// response is the raw bytes of a JSON-RPC result, or the error if the response
+// IndividualBulkResult represents one result
+// from a bulk json rpc api
+type IndividualBulkResult struct {
+	Result interface{}       `json:"result"`
+	Error  *btcjson.RPCError `json:"error"`
+	Id     uint64            `json:"id"`
+}
+
+type BulkResult = map[uint64]IndividualBulkResult
+
+// inMessage is the first type that an incoming message is unmarshaled
+// into. It supports both requests (for notification support) and
+// responses.  The partially-unmarshaled message is a notification if
+// the embedded ID (from the response) is nil.  Otherwise, it is a
+// response.
+type inMessage struct {
+	ID *float64 `json:"id"`
+	*rawNotification
+	*rawResponse
+}
+
+// rawNotification is a partially-unmarshaled JSON-RPC notification.
+type rawNotification struct {
+	Method string            `json:"method"`
+	Params []json.RawMessage `json:"params"`
+}
+
+// rawResponse is a partially-unmarshaled JSON-RPC response.  For this
+// to be valid (according to JSON-RPC 1.0 spec), ID may not be nil.
+type rawResponse struct {
+	Result json.RawMessage   `json:"result"`
+	Error  *btcjson.RPCError `json:"error"`
+}
+
+// Response is the raw bytes of a JSON-RPC result, or the error if the response
 // error object was non-null.
-type response struct {
+type Response struct {
 	result []byte
 	err    error
 }
 
 // result checks whether the unmarshaled response contains a non-nil error,
-// returning an unmarshaled btcjson.RPCError (or an unmarshaling error) if so.
+// returning an unmarshaled btcjson.RPCError (or an unmarshalling error) if so.
 // If the response is not an error, the raw bytes of the request are
 // returned for further unmashaling into specific result types.
 func (r rawResponse) result() (result []byte, err error) {
@@ -392,14 +426,14 @@ func (c *Client) handleMessage(msg []byte) {
 
 	// Deliver the response.
 	result, err := in.rawResponse.result()
-	request.responseChan <- &response{result: result, err: err}
+	request.responseChan <- &Response{result: result, err: err}
 }
 
 // shouldLogReadError returns whether or not the passed error, which is expected
 // to have come from reading from the websocket connection in wsInHandler,
 // should be logged.
 func (c *Client) shouldLogReadError(err error) bool {
-	// No logging when the connetion is being forcibly disconnected.
+	// No logging when the connection is being forcibly disconnected.
 	select {
 	case <-c.shutdown:
 		return false
@@ -689,10 +723,10 @@ out:
 
 			// Reset the connection state and signal the reconnect
 			// has happened.
+			c.mtx.Lock()
 			c.wsConn = wsConn
 			c.retryCount = 0
 
-			c.mtx.Lock()
 			c.disconnect = make(chan struct{})
 			c.disconnected = false
 			c.mtx.Unlock()
@@ -717,12 +751,85 @@ out:
 // handleSendPostMessage handles performing the passed HTTP request, reading the
 // result, unmarshalling it, and delivering the unmarshalled result to the
 // provided response channel.
-func (c *Client) handleSendPostMessage(details *sendPostDetails) {
-	jReq := details.jsonRequest
-	log.Tracef("Sending command [%s] with id %d", jReq.method, jReq.id)
-	httpResponse, err := c.httpClient.Do(details.httpRequest)
+func (c *Client) handleSendPostMessage(jReq *jsonRequest) {
+	protocol := "http"
+	if !c.config.DisableTLS {
+		protocol = "https"
+	}
+	url := protocol + "://" + c.config.Host
+
+	var (
+		err, lastErr error
+		backoff      time.Duration
+		httpResponse *http.Response
+	)
+
+	tries := 10
+	for i := 0; i < tries; i++ {
+		var httpReq *http.Request
+
+		bodyReader := bytes.NewReader(jReq.marshalledJSON)
+		httpReq, err = http.NewRequest("POST", url, bodyReader)
+		if err != nil {
+			jReq.responseChan <- &Response{result: nil, err: err}
+			return
+		}
+		httpReq.Close = true
+		httpReq.Header.Set("Content-Type", "application/json")
+		for key, value := range c.config.ExtraHeaders {
+			httpReq.Header.Set(key, value)
+		}
+
+		// Configure basic access authorization.
+		user, pass, err := c.config.getAuth()
+		if err != nil {
+			jReq.responseChan <- &Response{result: nil, err: err}
+			return
+		}
+		httpReq.SetBasicAuth(user, pass)
+
+		httpResponse, err = c.httpClient.Do(httpReq)
+
+		// Quit the retry loop on success or if we can't retry anymore.
+		if err == nil || i == tries-1 {
+			break
+		}
+
+		// Save the last error for the case where we backoff further,
+		// retry and get an invalid response but no error. If this
+		// happens the saved last error will be used to enrich the error
+		// message that we pass back to the caller.
+		lastErr = err
+
+		// Backoff sleep otherwise.
+		backoff = requestRetryInterval * time.Duration(i+1)
+		if backoff > time.Minute {
+			backoff = time.Minute
+		}
+		log.Debugf("Failed command [%s] with id %d attempt %d."+
+			" Retrying in %v... \n", jReq.method, jReq.id,
+			i, backoff)
+
+		select {
+		case <-time.After(backoff):
+
+		case <-c.shutdown:
+			return
+		}
+	}
 	if err != nil {
-		jReq.responseChan <- &response{err: err}
+		jReq.responseChan <- &Response{err: err}
+		return
+	}
+
+	// We still want to return an error if for any reason the response
+	// remains empty.
+	if httpResponse == nil {
+		jReq.responseChan <- &Response{
+			err: fmt.Errorf("invalid http POST response (nil), "+
+				"method: %s, id: %d, last error=%v",
+				jReq.method, jReq.id, lastErr),
+		}
 		return
 	}
 
@@ -731,25 +838,36 @@ func (c *Client) handleSendPostMessage(details *sendPostDetails) {
 	httpResponse.Body.Close()
 	if err != nil {
 		err = fmt.Errorf("error reading json reply: %v", err)
-		jReq.responseChan <- &response{err: err}
+		jReq.responseChan <- &Response{err: err}
 		return
 	}
 
 	// Try to unmarshal the response as a regular JSON-RPC response.
 	var resp rawResponse
-	err = json.Unmarshal(respBytes, &resp)
+	var batchResponse json.RawMessage
+	if c.batch {
+		err = json.Unmarshal(respBytes, &batchResponse)
+	} else {
+		err = json.Unmarshal(respBytes, &resp)
+	}
 	if err != nil {
 		// When the response itself isn't a valid JSON-RPC response
 		// return an error which includes the HTTP status code and raw
 		// response bytes.
 		err = fmt.Errorf("status code: %d, response: %q",
 			httpResponse.StatusCode, string(respBytes))
-		jReq.responseChan <- &response{err: err}
+		jReq.responseChan <- &Response{err: err}
 		return
 	}
-
-	res, err := resp.result()
-	jReq.responseChan <- &response{result: res, err: err}
+	var res []byte
+	if c.batch {
+		// errors must be dealt with downstream since a whole request cannot
+		// "error out" other than through the status code error handled above
+		res, err = batchResponse, nil
+	} else {
+		res, err = resp.result()
+	}
+	jReq.responseChan <- &Response{result: res, err: err}
 }
 
 // sendPostHandler handles all outgoing messages when the client is running
@@ -762,8 +880,8 @@ out:
 		// Send any messages ready for send until the shutdown channel
 		// is closed.
 		select {
-		case details := <-c.sendPostChan:
-			c.handleSendPostMessage(details)
+		case jReq := <-c.sendPostChan:
+			c.handleSendPostMessage(jReq)
 
 		case <-c.shutdown:
 			break out
@@ -775,8 +893,8 @@ out:
 cleanup:
 	for {
 		select {
-		case details := <-c.sendPostChan:
-			details.jsonRequest.responseChan <- &response{
+		case jReq := <-c.sendPostChan:
+			jReq.responseChan <- &Response{
 				result: nil,
 				err:    ErrClientShutdown,
 			}
@@ -787,71 +905,50 @@ cleanup:
 	}
 	c.wg.Done()
 	log.Tracef("RPC client send handler done for %s", c.config.Host)
-
 }
 
 // sendPostRequest sends the passed HTTP request to the RPC server using the
 // HTTP client associated with the client.  It is backed by a buffered channel,
 // so it will not block until the send channel is full.
-func (c *Client) sendPostRequest(httpReq *http.Request, jReq *jsonRequest) {
+func (c *Client) sendPostRequest(jReq *jsonRequest) {
 	// Don't send the message if shutting down.
 	select {
 	case <-c.shutdown:
-		jReq.responseChan <- &response{result: nil, err: ErrClientShutdown}
+		jReq.responseChan <- &Response{result: nil, err: ErrClientShutdown}
 	default:
 	}
 
-	c.sendPostChan <- &sendPostDetails{
-		jsonRequest: jReq,
-		httpRequest: httpReq,
+	select {
+	case c.sendPostChan <- jReq:
+		log.Tracef("Sent command [%s] with id %d", jReq.method, jReq.id)
+
+	case <-c.shutdown:
+		return
 	}
 }
 
 // newFutureError returns a new future result channel that already has the
 // passed error waitin on the channel with the reply set to nil.  This is useful
 // to easily return errors from the various Async functions.
-func newFutureError(err error) chan *response {
-	responseChan := make(chan *response, 1)
-	responseChan <- &response{err: err}
+func newFutureError(err error) chan *Response {
+	responseChan := make(chan *Response, 1)
+	responseChan <- &Response{err: err}
 	return responseChan
 }
 
-// receiveFuture receives from the passed futureResult channel to extract a
+// Expose newFutureError for developer usage when creating custom commands.
+func NewFutureError(err error) chan *Response {
+	return newFutureError(err)
+}
+
+// ReceiveFuture receives from the passed futureResult channel to extract a
 // reply or any errors.  The examined errors include an error in the
 // futureResult and the error in the reply from the server.  This will block
 // until the result is available on the passed channel.
-func receiveFuture(f chan *response) ([]byte, error) {
+func ReceiveFuture(f chan *Response) ([]byte, error) {
 	// Wait for a response on the returned channel.
 	r := <-f
 	return r.result, r.err
-}
-
-// sendPost sends the passed request to the server by issuing an HTTP POST
-// request using the provided response channel for the reply.  Typically a new
-// connection is opened and closed for each command when using this method,
-// however, the underlying HTTP client might coalesce multiple commands
-// depending on several factors including the remote server configuration.
-func (c *Client) sendPost(jReq *jsonRequest) {
-	// Generate a request to the configured RPC server.
-	protocol := "http"
-	if !c.config.DisableTLS {
-		protocol = "https"
-	}
-	url := protocol + "://" + c.config.Host
-	bodyReader := bytes.NewReader(jReq.marshalledJSON)
-	httpReq, err := http.NewRequest("POST", url, bodyReader)
-	if err != nil {
-		jReq.responseChan <- &response{result: nil, err: err}
-		return
-	}
-	httpReq.Close = true
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	// Configure basic access authorization.
-	httpReq.SetBasicAuth(c.config.User, c.config.Pass)
-
-	log.Tracef("Sending command [%s] with id %d", jReq.method, jReq.id)
-	c.sendPostRequest(httpReq, jReq)
 }
 
 // sendRequest sends the passed json request to the associated server using the
@@ -863,7 +960,13 @@ func (c *Client) sendRequest(jReq *jsonRequest) {
 	// POST mode, the command is issued via an HTTP client.  Otherwise,
 	// the command is issued via the asynchronous websocket channels.
 	if c.config.HTTPPostMode {
-		c.sendPost(jReq)
+		if c.batch {
+			if err := c.addRequest(jReq); err != nil {
+				log.Warn(err)
+			}
+		} else {
+			c.sendPostRequest(jReq)
+		}
 		return
 	}
 
@@ -872,7 +975,7 @@ func (c *Client) sendRequest(jReq *jsonRequest) {
 	select {
 	case <-c.connEstablished:
 	default:
-		jReq.responseChan <- &response{err: ErrClientNotConnected}
+		jReq.responseChan <- &Response{err: ErrClientNotConnected}
 		return
 	}
 
@@ -881,18 +984,22 @@ func (c *Client) sendRequest(jReq *jsonRequest) {
 	// channel.  Then send the marshalled request via the websocket
 	// connection.
 	if err := c.addRequest(jReq); err != nil {
-		jReq.responseChan <- &response{err: err}
+		jReq.responseChan <- &Response{err: err}
 		return
 	}
 	log.Tracef("Sending command [%s] with id %d", jReq.method, jReq.id)
 	c.sendMessage(jReq.marshalledJSON)
 }
 
-// sendCmd sends the passed command to the associated server and returns a
+// SendCmd sends the passed command to the associated server and returns a
 // response channel on which the reply will be delivered at some point in the
 // future.  It handles both websocket and HTTP POST mode depending on the
 // configuration of the client.
-func (c *Client) sendCmd(cmd interface{}) chan *response {
+func (c *Client) SendCmd(cmd interface{}) chan *Response {
+	rpcVersion := btcjson.RpcVersion1
+	if c.batch {
+		rpcVersion = btcjson.RpcVersion2
+	}
 	// Get the method associated with the command.
 	method, err := btcjson.CmdMethod(cmd)
 	if err != nil {
@@ -901,13 +1008,13 @@ func (c *Client) sendCmd(cmd interface{}) chan *response {
 
 	// Marshal the command.
 	id := c.NextID()
-	marshalledJSON, err := btcjson.MarshalCmd(id, cmd)
+	marshalledJSON, err := btcjson.MarshalCmd(rpcVersion, id, cmd)
 	if err != nil {
 		return newFutureError(err)
 	}
 
 	// Generate the request and send it along with a channel to respond on.
-	responseChan := make(chan *response, 1)
+	responseChan := make(chan *Response, 1)
 	jReq := &jsonRequest{
 		id:             id,
 		method:         method,
@@ -915,6 +1022,7 @@ func (c *Client) sendCmd(cmd interface{}) chan *response {
 		marshalledJSON: marshalledJSON,
 		responseChan:   responseChan,
 	}
+
 	c.sendRequest(jReq)
 
 	return responseChan
@@ -926,7 +1034,7 @@ func (c *Client) sendCmd(cmd interface{}) chan *response {
 func (c *Client) sendCmdAndWait(cmd interface{}) (interface{}, error) {
 	// Marshal the command to JSON-RPC, send it to the connected server, and
 	// wait for a response on the returned channel.
-	return receiveFuture(c.sendCmd(cmd))
+	return ReceiveFuture(c.SendCmd(cmd))
 }
 
 // Disconnected returns whether or not the server is disconnected.  If a
@@ -1007,7 +1115,7 @@ func (c *Client) Disconnect() {
 	if c.config.DisableAutoReconnect {
 		for e := c.requestList.Front(); e != nil; e = e.Next() {
 			req := e.Value.(*jsonRequest)
-			req.responseChan <- &response{
+			req.responseChan <- &Response{
 				result: nil,
 				err:    ErrClientDisconnect,
 			}
@@ -1035,7 +1143,7 @@ func (c *Client) Shutdown() {
 	// Send the ErrClientShutdown error to any pending requests.
 	for e := c.requestList.Front(); e != nil; e = e.Next() {
 		req := e.Value.(*jsonRequest)
-		req.responseChan <- &response{
+		req.responseChan <- &Response{
 			result: nil,
 			err:    ErrClientShutdown,
 		}
@@ -1093,6 +1201,22 @@ type ConnConfig struct {
 	// Pass is the passphrase to use to authenticate to the RPC server.
 	Pass string
 
+	// CookiePath is the path to a cookie file containing the username and
+	// passphrase to use to authenticate to the RPC server.  It is used
+	// instead of User and Pass if non-empty.
+	CookiePath string
+
+	cookieLastCheckTime time.Time
+	cookieLastModTime   time.Time
+	cookieLastUser      string
+	cookieLastPass      string
+	cookieLastErr       error
+
+	// Params is the string representing the network that the server
+	// is running. If there is no parameter set in the config, then
+	// mainnet will be used by default.
+	Params string
+
 	// DisableTLS specifies whether transport layer security should be
 	// disabled.  It is recommended to always use TLS if the RPC server
 	// supports it as otherwise your username and password is sent across
@@ -1136,9 +1260,50 @@ type ConnConfig struct {
 	// flag can be set to true to use basic HTTP POST requests instead.
 	HTTPPostMode bool
 
+	// ExtraHeaders specifies the extra headers when perform request. It's
+	// useful when RPC provider need customized headers.
+	ExtraHeaders map[string]string
+
 	// EnableBCInfoHacks is an option provided to enable compatibility hacks
 	// when connecting to blockchain.info RPC server
 	EnableBCInfoHacks bool
+}
+
+// getAuth returns the username and passphrase that will actually be used for
+// this connection.  This will be the result of checking the cookie if a cookie
+// path is configured; if not, it will be the user-configured username and
+// passphrase.
+func (config *ConnConfig) getAuth() (username, passphrase string, err error) {
+	// Try username+passphrase auth first.
+	if config.Pass != "" {
+		return config.User, config.Pass, nil
+	}
+
+	// If no username or passphrase is set, try cookie auth.
+	return config.retrieveCookie()
+}
+
+// retrieveCookie returns the cookie username and passphrase.
+func (config *ConnConfig) retrieveCookie() (username, passphrase string, err error) {
+	if !config.cookieLastCheckTime.IsZero() && time.Now().Before(config.cookieLastCheckTime.Add(30*time.Second)) {
+		return config.cookieLastUser, config.cookieLastPass, config.cookieLastErr
+	}
+
+	config.cookieLastCheckTime = time.Now()
+
+	st, err := os.Stat(config.CookiePath)
+	if err != nil {
+		config.cookieLastErr = err
+		return config.cookieLastUser, config.cookieLastPass, config.cookieLastErr
+	}
+
+	modTime := st.ModTime()
+	if !modTime.Equal(config.cookieLastModTime) {
+		config.cookieLastModTime = modTime
+		config.cookieLastUser, config.cookieLastPass, config.cookieLastErr = readCookieFile(config.CookiePath)
+	}
+
+	return config.cookieLastUser, config.cookieLastPass, config.cookieLastErr
 }
 
 // newHTTPClient returns a new http client that is configured according to the
@@ -1210,10 +1375,17 @@ func dial(config *ConnConfig) (*websocket.Conn, error) {
 
 	// The RPC server requires basic authorization, so create a custom
 	// request header with the Authorization header set.
-	login := config.User + ":" + config.Pass
+	user, pass, err := config.getAuth()
+	if err != nil {
+		return nil, err
+	}
+	login := user + ":" + pass
 	auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(login))
 	requestHeader := make(http.Header)
 	requestHeader.Add("Authorization", auth)
+	for key, value := range config.ExtraHeaders {
+		requestHeader.Add(key, value)
+	}
 
 	// Dial the connection.
 	url := fmt.Sprintf("%s://%s/%s", scheme, config.Host, config.Endpoint)
@@ -1281,13 +1453,32 @@ func New(config *ConnConfig, ntfnHandlers *NotificationHandlers) (*Client, error
 		httpClient:      httpClient,
 		requestMap:      make(map[uint64]*list.Element),
 		requestList:     list.New(),
+		batch:           false,
+		batchList:       list.New(),
 		ntfnHandlers:    ntfnHandlers,
 		ntfnState:       newNotificationState(),
 		sendChan:        make(chan []byte, sendBufferSize),
-		sendPostChan:    make(chan *sendPostDetails, sendPostBufferSize),
+		sendPostChan:    make(chan *jsonRequest, sendPostBufferSize),
 		connEstablished: connEstablished,
 		disconnect:      make(chan struct{}),
 		shutdown:        make(chan struct{}),
+	}
+
+	// Default network is mainnet, no parameters are necessary but if mainnet
+	// is specified it will be the param
+	switch config.Params {
+	case "":
+		fallthrough
+	case chaincfg.MainNetParams.Name:
+		client.chainParams = &chaincfg.MainNetParams
+	case chaincfg.TestNet3Params.Name:
+		client.chainParams = &chaincfg.TestNet3Params
+	case chaincfg.RegressionNetParams.Name:
+		client.chainParams = &chaincfg.RegressionNetParams
+	case chaincfg.SimNetParams.Name:
+		client.chainParams = &chaincfg.SimNetParams
+	default:
+		return nil, fmt.Errorf("rpcclient.New: Unknown chain %s", config.Params)
 	}
 
 	if start {
@@ -1301,6 +1492,24 @@ func New(config *ConnConfig, ntfnHandlers *NotificationHandlers) (*Client, error
 		}
 	}
 
+	return client, nil
+}
+
+// Batch is a factory that creates a client able to interact with the server using
+// JSON-RPC 2.0. The client is capable of accepting an arbitrary number of requests
+// and having the server process the all at the same time. It's compatible with both
+// btcd and bitcoind
+func NewBatch(config *ConnConfig) (*Client, error) {
+	if !config.HTTPPostMode {
+		return nil, errors.New("http post mode is required to use batch client")
+	}
+	// notification parameter is nil since notifications are not supported in POST mode.
+	client, err := New(config, nil)
+	if err != nil {
+		return nil, err
+	}
+	client.batch = true //copy the client with changed batch setting
+	client.start()
 	return client, nil
 }
 
@@ -1361,36 +1570,6 @@ func (c *Client) Connect(tries int) error {
 	return err
 }
 
-const (
-	// bitcoind19Str is the string representation of bitcoind v0.19.0.
-	bitcoind19Str = "0.19.0"
-
-	// bitcoindVersionPrefix specifies the prefix included in every bitcoind
-	// version exposed through GetNetworkInfo.
-	bitcoindVersionPrefix = "/Satoshi:"
-
-	// bitcoindVersionSuffix specifies the suffix included in every bitcoind
-	// version exposed through GetNetworkInfo.
-	bitcoindVersionSuffix = "/"
-)
-
-// parseBitcoindVersion parses the bitcoind version from its string
-// representation.
-func parseBitcoindVersion(version string) BackendVersion {
-	// Trim the version of its prefix and suffix to determine the
-	// appropriate version number.
-	version = strings.TrimPrefix(
-		strings.TrimSuffix(version, bitcoindVersionSuffix),
-		bitcoindVersionPrefix,
-	)
-	switch {
-	case version < bitcoind19Str:
-		return BitcoindPre19
-	default:
-		return BitcoindPost19
-	}
-}
-
 // BackendVersion retrieves the version of the backend the client is currently
 // connected to.
 func (c *Client) BackendVersion() (BackendVersion, error) {
@@ -1398,7 +1577,7 @@ func (c *Client) BackendVersion() (BackendVersion, error) {
 	defer c.backendVersionMu.Unlock()
 
 	if c.backendVersion != nil {
-		return *c.backendVersion, nil
+		return c.backendVersion, nil
 	}
 
 	// We'll start by calling GetInfo. This method doesn't exist for
@@ -1410,20 +1589,20 @@ func (c *Client) BackendVersion() (BackendVersion, error) {
 	// Parse the btcd version and cache it.
 	case nil:
 		log.Debugf("Detected btcd version: %v", info.Version)
-		version := Btcd
-		c.backendVersion = &version
-		return *c.backendVersion, nil
+		version := parseBtcdVersion(info.Version)
+		c.backendVersion = version
+		return c.backendVersion, nil
 
 	// Inspect the RPC error to ensure the method was not found, otherwise
 	// we actually ran into an error.
 	case *btcjson.RPCError:
 		if err.Code != btcjson.ErrRPCMethodNotFound.Code {
-			return 0, fmt.Errorf("unable to detect btcd version: "+
+			return nil, fmt.Errorf("unable to detect btcd version: "+
 				"%v", err)
 		}
 
 	default:
-		return 0, fmt.Errorf("unable to detect btcd version: %v", err)
+		return nil, fmt.Errorf("unable to detect btcd version: %v", err)
 	}
 
 	// Since the GetInfo method was not found, we assume the client is
@@ -1431,7 +1610,8 @@ func (c *Client) BackendVersion() (BackendVersion, error) {
 	// GetNetworkInfo.
 	networkInfo, err := c.GetNetworkInfo()
 	if err != nil {
-		return 0, fmt.Errorf("unable to detect bitcoind version: %v", err)
+		return nil, fmt.Errorf("unable to detect bitcoind version: %v",
+			err)
 	}
 
 	// Parse the bitcoind version and cache it.
@@ -1439,5 +1619,82 @@ func (c *Client) BackendVersion() (BackendVersion, error) {
 	version := parseBitcoindVersion(networkInfo.SubVersion)
 	c.backendVersion = &version
 
-	return *c.backendVersion, nil
+	return c.backendVersion, nil
+}
+
+func (c *Client) sendAsync() FutureGetBulkResult {
+	// convert the array of marshalled json requests to a single request we can send
+	responseChan := make(chan *Response, 1)
+	marshalledRequest := []byte("[")
+	for iter := c.batchList.Front(); iter != nil; iter = iter.Next() {
+		request := iter.Value.(*jsonRequest)
+		marshalledRequest = append(marshalledRequest, request.marshalledJSON...)
+		marshalledRequest = append(marshalledRequest, []byte(",")...)
+	}
+	if len(marshalledRequest) > 0 {
+		// removes the trailing comma to process the request individually
+		marshalledRequest = marshalledRequest[:len(marshalledRequest)-1]
+	}
+	marshalledRequest = append(marshalledRequest, []byte("]")...)
+	request := jsonRequest{
+		id:             c.NextID(),
+		method:         "",
+		cmd:            nil,
+		marshalledJSON: marshalledRequest,
+		responseChan:   responseChan,
+	}
+	c.sendPostRequest(&request)
+	return responseChan
+}
+
+// Marshall's bulk requests and sends to the server
+// creates a response channel to receive the response
+func (c *Client) Send() error {
+	// if batchlist is empty, there's nothing to send
+	if c.batchList.Len() == 0 {
+		return nil
+	}
+
+	batchResp, err := c.sendAsync().Receive()
+	if err != nil {
+		// Clear batchlist in case of an error.
+		//
+		// TODO(yy): need to double check to make sure there's no
+		// concurrent access to this batch list, otherwise we may miss
+		// some batched requests.
+		c.batchList = list.New()
+
+		return err
+	}
+
+	// Iterate each response and send it to the corresponding request.
+	for id, resp := range batchResp {
+		// Perform a GC on batchList and requestMap before moving
+		// forward.
+		request := c.removeRequest(id)
+
+		// If there's an error, we log it and continue to the next
+		// request.
+		fullResult, err := json.Marshal(resp.Result)
+		if err != nil {
+			log.Errorf("Unable to marshal result: %v for req=%v",
+				err, request.id)
+
+			continue
+		}
+
+		// If there's a response error, we send it back the request.
+		var requestError error
+		if resp.Error != nil {
+			requestError = resp.Error
+		}
+
+		result := Response{
+			result: fullResult,
+			err:    requestError,
+		}
+		request.responseChan <- &result
+	}
+
+	return nil
 }

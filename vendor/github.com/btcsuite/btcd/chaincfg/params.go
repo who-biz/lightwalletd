@@ -5,8 +5,9 @@
 package chaincfg
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
-	"math"
 	"math/big"
 	"strings"
 	"time"
@@ -38,6 +39,31 @@ var (
 	// simNetPowLimit is the highest proof of work value a Bitcoin block
 	// can have for the simulation test network.  It is the value 2^255 - 1.
 	simNetPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 255), bigOne)
+
+	// sigNetPowLimit is the highest proof of work value a bitcoin block can
+	// have for the signet test network. It is the value 0x0377ae << 216.
+	sigNetPowLimit = new(big.Int).Lsh(new(big.Int).SetInt64(0x0377ae), 216)
+
+	// DefaultSignetChallenge is the byte representation of the signet
+	// challenge for the default (public, Taproot enabled) signet network.
+	// This is the binary equivalent of the bitcoin script
+	//  1 03ad5e0edad18cb1f0fc0d28a3d4f1f3e445640337489abb10404f2d1e086be430
+	//  0359ef5021964fe22d6f8e05b2463c9540ce96883fe3b278760f048f5189f2e6c4 2
+	//  OP_CHECKMULTISIG
+	DefaultSignetChallenge, _ = hex.DecodeString(
+		"512103ad5e0edad18cb1f0fc0d28a3d4f1f3e445640337489abb10404f2d" +
+			"1e086be430210359ef5021964fe22d6f8e05b2463c9540ce9688" +
+			"3fe3b278760f048f5189f2e6c452ae",
+	)
+
+	// DefaultSignetDNSSeeds is the list of seed nodes for the default
+	// (public, Taproot enabled) signet network.
+	DefaultSignetDNSSeeds = []DNSSeed{
+		{"seed.signet.bitcoin.sprovoost.nl", true},
+		{"178.128.221.177", false},
+		{"2a01:7c8:d005:390::5", false},
+		{"v7ajjeirttkbnt32wpy3c6w3emwnfr3fkla7hpxcfokr3ysd3kqtzmqd.onion:38333", false},
+	}
 )
 
 // Checkpoint identifies a known good point in the block chain.  Using
@@ -69,13 +95,26 @@ type ConsensusDeployment struct {
 	// this particular soft-fork deployment refers to.
 	BitNumber uint8
 
-	// StartTime is the median block time after which voting on the
-	// deployment starts.
-	StartTime uint64
+	// MinActivationHeight is an optional field that when set (default
+	// value being zero), modifies the traditional BIP 9 state machine by
+	// only transitioning from LockedIn to Active once the block height is
+	// greater than (or equal to) thus specified height.
+	MinActivationHeight uint32
 
-	// ExpireTime is the median block time after which the attempted
-	// deployment expires.
-	ExpireTime uint64
+	// CustomActivationThreshold if set (non-zero), will _override_ the
+	// existing RuleChangeActivationThreshold value set at the
+	// network/chain level. This value divided by the active
+	// MinerConfirmationWindow denotes the threshold required for
+	// activation. A value of 1815 block denotes a 90% threshold.
+	CustomActivationThreshold uint32
+
+	// DeploymentStarter is used to determine if the given
+	// ConsensusDeployment has started or not.
+	DeploymentStarter ConsensusDeploymentStarter
+
+	// DeploymentEnder is used to determine if the given
+	// ConsensusDeployment has ended or not.
+	DeploymentEnder ConsensusDeploymentEnder
 }
 
 // Constants that define the deployment offset in the deployments field of the
@@ -86,6 +125,12 @@ const (
 	// purposes.
 	DeploymentTestDummy = iota
 
+	// DeploymentTestDummyMinActivation defines the rule change deployment
+	// ID for testing purposes. This differs from the DeploymentTestDummy
+	// in that it specifies the newer params the taproot fork used for
+	// activation: a custom threshold and a min activation height.
+	DeploymentTestDummyMinActivation
+
 	// DeploymentCSV defines the rule change deployment ID for the CSV
 	// soft-fork package. The CSV package includes the deployment of BIPS
 	// 68, 112, and 113.
@@ -95,6 +140,11 @@ const (
 	// Segregated Witness (segwit) soft-fork package. The segwit package
 	// includes the deployment of BIPS 141, 142, 144, 145, 147 and 173.
 	DeploymentSegwit
+
+	// DeploymentTaproot defines the rule change deployment ID for the
+	// Taproot (+Schnorr) soft-fork package. The taproot package includes
+	// the deployment of BIPS 340, 341 and 342.
+	DeploymentTaproot
 
 	// NOTE: DefinedDeployments must always come last since it is used to
 	// determine how many defined deployments there currently are.
@@ -133,6 +183,11 @@ type Params struct {
 	// PowLimitBits defines the highest allowed proof of work value for a
 	// block in compact form.
 	PowLimitBits uint32
+
+	// PoWNoRetargeting defines whether the network has difficulty
+	// retargeting enabled or not. This should only be set to true for
+	// regtest like networks.
+	PoWNoRetargeting bool
 
 	// These fields define the block heights at which the specified softfork
 	// BIP became active.
@@ -230,9 +285,11 @@ var MainNetParams = Params{
 		{"seed.bitcoin.sipa.be", true},
 		{"dnsseed.bluematt.me", true},
 		{"dnsseed.bitcoin.dashjr.org", false},
-		{"seed.bitcoinstats.com", true},
 		{"seed.bitnodes.io", false},
 		{"seed.bitcoin.jonasschnelli.ch", true},
+		{"seed.btc.petertodd.net", true},
+		{"seed.bitcoin.sprovoost.nl", true},
+		{"seed.bitcoin.wiz.biz", true},
 	},
 
 	// Chain parameters
@@ -279,6 +336,16 @@ var MainNetParams = Params{
 		{520000, newHashFromStr("0000000000000000000d26984c0229c9f6962dc74db0a6d525f2f1640396f69c")},
 		{550000, newHashFromStr("000000000000000000223b7a2298fb1c6c75fb0efc28a4c56853ff4112ec6bc9")},
 		{560000, newHashFromStr("0000000000000000002c7b276daf6efb2b6aa68e2ce3be67ef925b3264ae7122")},
+		{563378, newHashFromStr("0000000000000000000f1c54590ee18d15ec70e68c8cd4cfbadb1b4f11697eee")},
+		{597379, newHashFromStr("00000000000000000005f8920febd3925f8272a6a71237563d78c2edfdd09ddf")},
+		{623950, newHashFromStr("0000000000000000000f2adce67e49b0b6bdeb9de8b7c3d7e93b21e7fc1e819d")},
+		{654683, newHashFromStr("0000000000000000000b9d2ec5a352ecba0592946514a92f14319dc2b367fc72")},
+		{691719, newHashFromStr("00000000000000000008a89e854d57e5667df88f1cdef6fde2fbca1de5b639ad")},
+		{724466, newHashFromStr("000000000000000000052d314a259755ca65944e68df6b12a067ea8f1f5a7091")},
+		{751565, newHashFromStr("00000000000000000009c97098b5295f7e5f183ac811fb5d1534040adb93cabd")},
+		{781565, newHashFromStr("00000000000000000002b8c04999434c33b8e033f11a977b288f8411766ee61c")},
+		{800000, newHashFromStr("00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054")},
+		{810000, newHashFromStr("000000000000000000028028ca82b6aa81ce789e4eb9e0321b74c3cbaf405dd1")},
 	},
 
 	// Consensus rule change deployments.
@@ -289,19 +356,53 @@ var MainNetParams = Params{
 	MinerConfirmationWindow:       2016, //
 	Deployments: [DefinedDeployments]ConsensusDeployment{
 		DeploymentTestDummy: {
-			BitNumber:  28,
-			StartTime:  1199145601, // January 1, 2008 UTC
-			ExpireTime: 1230767999, // December 31, 2008 UTC
+			BitNumber: 28,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Unix(11991456010, 0), // January 1, 2008 UTC
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Unix(1230767999, 0), // December 31, 2008 UTC
+			),
+		},
+		DeploymentTestDummyMinActivation: {
+			BitNumber:                 22,
+			CustomActivationThreshold: 1815,    // Only needs 90% hash rate.
+			MinActivationHeight:       10_0000, // Can only activate after height 10k.
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires
+			),
 		},
 		DeploymentCSV: {
-			BitNumber:  0,
-			StartTime:  1462060800, // May 1st, 2016
-			ExpireTime: 1493596800, // May 1st, 2017
+			BitNumber: 0,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Unix(1462060800, 0), // May 1st, 2016
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Unix(1493596800, 0), // May 1st, 2017
+			),
 		},
 		DeploymentSegwit: {
-			BitNumber:  1,
-			StartTime:  1479168000, // November 15, 2016 UTC
-			ExpireTime: 1510704000, // November 15, 2017 UTC.
+			BitNumber: 1,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Unix(1479168000, 0), // November 15, 2016 UTC
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Unix(1510704000, 0), // November 15, 2017 UTC.
+			),
+		},
+		DeploymentTaproot: {
+			BitNumber: 2,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Unix(1619222400, 0), // April 24th, 2021 UTC.
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Unix(1628640000, 0), // August 11th, 2021 UTC.
+			),
+			CustomActivationThreshold: 1815, // 90%
+			MinActivationHeight:       709_632,
 		},
 	},
 
@@ -342,6 +443,7 @@ var RegressionNetParams = Params{
 	GenesisHash:              &regTestGenesisHash,
 	PowLimit:                 regressionPowLimit,
 	PowLimitBits:             0x207fffff,
+	PoWNoRetargeting:         true,
 	CoinbaseMaturity:         100,
 	BIP0034Height:            100000000, // Not active - Permit ver 1 blocks
 	BIP0065Height:            1351,      // Used by regression tests
@@ -365,19 +467,52 @@ var RegressionNetParams = Params{
 	MinerConfirmationWindow:       144,
 	Deployments: [DefinedDeployments]ConsensusDeployment{
 		DeploymentTestDummy: {
-			BitNumber:  28,
-			StartTime:  0,             // Always available for vote
-			ExpireTime: math.MaxInt64, // Never expires
+			BitNumber: 28,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires
+			),
+		},
+		DeploymentTestDummyMinActivation: {
+			BitNumber:                 22,
+			CustomActivationThreshold: 72,  // Only needs 50% hash rate.
+			MinActivationHeight:       600, // Can only activate after height 600.
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires
+			),
 		},
 		DeploymentCSV: {
-			BitNumber:  0,
-			StartTime:  0,             // Always available for vote
-			ExpireTime: math.MaxInt64, // Never expires
+			BitNumber: 0,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires
+			),
 		},
 		DeploymentSegwit: {
-			BitNumber:  1,
-			StartTime:  0,             // Always available for vote
-			ExpireTime: math.MaxInt64, // Never expires.
+			BitNumber: 1,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires.
+			),
+		},
+		DeploymentTaproot: {
+			BitNumber: 2,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires.
+			),
+			CustomActivationThreshold: 108, // Only needs 75% hash rate.
 		},
 	},
 
@@ -411,8 +546,8 @@ var TestNet3Params = Params{
 	DefaultPort: "18333",
 	DNSSeeds: []DNSSeed{
 		{"testnet-seed.bitcoin.jonasschnelli.ch", true},
-		{"testnet-seed.bitcoin.schildbach.de", false},
-		{"seed.tbtc.petertodd.org", true},
+		{"seed.tbtc.petertodd.net", true},
+		{"seed.testnet.bitcoin.sprovoost.nl", true},
 		{"testnet-seed.bluematt.me", false},
 	},
 
@@ -449,6 +584,13 @@ var TestNet3Params = Params{
 		{1100007, newHashFromStr("00000000000abc7b2cd18768ab3dee20857326a818d1946ed6796f42d66dd1e8")},
 		{1200007, newHashFromStr("00000000000004f2dc41845771909db57e04191714ed8c963f7e56713a7b6cea")},
 		{1300007, newHashFromStr("0000000072eab69d54df75107c052b26b0395b44f77578184293bf1bb1dbd9fa")},
+		{1354312, newHashFromStr("0000000000000037a8cd3e06cd5edbfe9dd1dbcc5dacab279376ef7cfc2b4c75")},
+		{1580000, newHashFromStr("00000000000000b7ab6ce61eb6d571003fbe5fe892da4c9b740c49a07542462d")},
+		{1692000, newHashFromStr("000000000000056c49030c174179b52a928c870e6e8a822c75973b7970cfbd01")},
+		{1864000, newHashFromStr("000000000000006433d1efec504c53ca332b64963c425395515b01977bd7b3b0")},
+		{2010000, newHashFromStr("0000000000004ae2f3896ca8ecd41c460a35bf6184e145d91558cece1c688a76")},
+		{2143398, newHashFromStr("00000000000163cfb1f97c4e4098a3692c8053ad9cab5ad9c86b338b5c00b8b7")},
+		{2344474, newHashFromStr("0000000000000004877fa2d36316398528de4f347df2f8a96f76613a298ce060")},
 	},
 
 	// Consensus rule change deployments.
@@ -459,19 +601,52 @@ var TestNet3Params = Params{
 	MinerConfirmationWindow:       2016,
 	Deployments: [DefinedDeployments]ConsensusDeployment{
 		DeploymentTestDummy: {
-			BitNumber:  28,
-			StartTime:  1199145601, // January 1, 2008 UTC
-			ExpireTime: 1230767999, // December 31, 2008 UTC
+			BitNumber: 28,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Unix(1199145601, 0), // January 1, 2008 UTC
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Unix(1230767999, 0), // December 31, 2008 UTC
+			),
+		},
+		DeploymentTestDummyMinActivation: {
+			BitNumber:                 22,
+			CustomActivationThreshold: 1815,    // Only needs 90% hash rate.
+			MinActivationHeight:       10_0000, // Can only activate after height 10k.
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires
+			),
 		},
 		DeploymentCSV: {
-			BitNumber:  0,
-			StartTime:  1456790400, // March 1st, 2016
-			ExpireTime: 1493596800, // May 1st, 2017
+			BitNumber: 0,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Unix(1456790400, 0), // March 1st, 2016
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Unix(1493596800, 0), // May 1st, 2017
+			),
 		},
 		DeploymentSegwit: {
-			BitNumber:  1,
-			StartTime:  1462060800, // May 1, 2016 UTC
-			ExpireTime: 1493596800, // May 1, 2017 UTC.
+			BitNumber: 1,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Unix(1462060800, 0), // May 1, 2016 UTC
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Unix(1493596800, 0), // May 1, 2017 UTC.
+			),
+		},
+		DeploymentTaproot: {
+			BitNumber: 2,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Unix(1619222400, 0), // April 24th, 2021 UTC.
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Unix(1628640000, 0), // August 11th, 2021 UTC
+			),
+			CustomActivationThreshold: 1512, // 75%
 		},
 	},
 
@@ -539,19 +714,52 @@ var SimNetParams = Params{
 	MinerConfirmationWindow:       100,
 	Deployments: [DefinedDeployments]ConsensusDeployment{
 		DeploymentTestDummy: {
-			BitNumber:  28,
-			StartTime:  0,             // Always available for vote
-			ExpireTime: math.MaxInt64, // Never expires
+			BitNumber: 28,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires
+			),
+		},
+		DeploymentTestDummyMinActivation: {
+			BitNumber:                 22,
+			CustomActivationThreshold: 50,  // Only needs 50% hash rate.
+			MinActivationHeight:       600, // Can only activate after height 600.
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires
+			),
 		},
 		DeploymentCSV: {
-			BitNumber:  0,
-			StartTime:  0,             // Always available for vote
-			ExpireTime: math.MaxInt64, // Never expires
+			BitNumber: 0,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires
+			),
 		},
 		DeploymentSegwit: {
-			BitNumber:  1,
-			StartTime:  0,             // Always available for vote
-			ExpireTime: math.MaxInt64, // Never expires.
+			BitNumber: 1,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires.
+			),
+		},
+		DeploymentTaproot: {
+			BitNumber: 2,
+			DeploymentStarter: NewMedianTimeDeploymentStarter(
+				time.Time{}, // Always available for vote
+			),
+			DeploymentEnder: NewMedianTimeDeploymentEnder(
+				time.Time{}, // Never expires.
+			),
+			CustomActivationThreshold: 75, // Only needs 75% hash rate.
 		},
 	},
 
@@ -578,6 +786,134 @@ var SimNetParams = Params{
 	HDCoinType: 115, // ASCII for s
 }
 
+// SigNetParams defines the network parameters for the default public signet
+// Bitcoin network. Not to be confused with the regression test network, this
+// network is sometimes simply called "signet" or "taproot signet".
+var SigNetParams = CustomSignetParams(
+	DefaultSignetChallenge, DefaultSignetDNSSeeds,
+)
+
+// CustomSignetParams creates network parameters for a custom signet network
+// from a challenge. The challenge is the binary compiled version of the block
+// challenge script.
+func CustomSignetParams(challenge []byte, dnsSeeds []DNSSeed) Params {
+	// The message start is defined as the first four bytes of the sha256d
+	// of the challenge script, as a single push (i.e. prefixed with the
+	// challenge script length).
+	challengeLength := byte(len(challenge))
+	hashDouble := chainhash.DoubleHashB(
+		append([]byte{challengeLength}, challenge...),
+	)
+
+	// We use little endian encoding of the hash prefix to be in line with
+	// the other wire network identities.
+	net := binary.LittleEndian.Uint32(hashDouble[0:4])
+	return Params{
+		Name:        "signet",
+		Net:         wire.BitcoinNet(net),
+		DefaultPort: "38333",
+		DNSSeeds:    dnsSeeds,
+
+		// Chain parameters
+		GenesisBlock:             &sigNetGenesisBlock,
+		GenesisHash:              &sigNetGenesisHash,
+		PowLimit:                 sigNetPowLimit,
+		PowLimitBits:             0x1e0377ae,
+		BIP0034Height:            1,
+		BIP0065Height:            1,
+		BIP0066Height:            1,
+		CoinbaseMaturity:         100,
+		SubsidyReductionInterval: 210000,
+		TargetTimespan:           time.Hour * 24 * 14, // 14 days
+		TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
+		RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
+		ReduceMinDifficulty:      false,
+		MinDiffReductionTime:     time.Minute * 20, // TargetTimePerBlock * 2
+		GenerateSupported:        false,
+
+		// Checkpoints ordered from oldest to newest.
+		Checkpoints: nil,
+
+		// Consensus rule change deployments.
+		//
+		// The miner confirmation window is defined as:
+		//   target proof of work timespan / target proof of work spacing
+		RuleChangeActivationThreshold: 1916, // 95% of 2016
+		MinerConfirmationWindow:       2016,
+		Deployments: [DefinedDeployments]ConsensusDeployment{
+			DeploymentTestDummy: {
+				BitNumber: 28,
+				DeploymentStarter: NewMedianTimeDeploymentStarter(
+					time.Unix(1199145601, 0), // January 1, 2008 UTC
+				),
+				DeploymentEnder: NewMedianTimeDeploymentEnder(
+					time.Unix(1230767999, 0), // December 31, 2008 UTC
+				),
+			},
+			DeploymentTestDummyMinActivation: {
+				BitNumber:                 22,
+				CustomActivationThreshold: 1815,    // Only needs 90% hash rate.
+				MinActivationHeight:       10_0000, // Can only activate after height 10k.
+				DeploymentStarter: NewMedianTimeDeploymentStarter(
+					time.Time{}, // Always available for vote
+				),
+				DeploymentEnder: NewMedianTimeDeploymentEnder(
+					time.Time{}, // Never expires
+				),
+			},
+			DeploymentCSV: {
+				BitNumber: 29,
+				DeploymentStarter: NewMedianTimeDeploymentStarter(
+					time.Time{}, // Always available for vote
+				),
+				DeploymentEnder: NewMedianTimeDeploymentEnder(
+					time.Time{}, // Never expires
+				),
+			},
+			DeploymentSegwit: {
+				BitNumber: 29,
+				DeploymentStarter: NewMedianTimeDeploymentStarter(
+					time.Time{}, // Always available for vote
+				),
+				DeploymentEnder: NewMedianTimeDeploymentEnder(
+					time.Time{}, // Never expires
+				),
+			},
+			DeploymentTaproot: {
+				BitNumber: 29,
+				DeploymentStarter: NewMedianTimeDeploymentStarter(
+					time.Time{}, // Always available for vote
+				),
+				DeploymentEnder: NewMedianTimeDeploymentEnder(
+					time.Time{}, // Never expires
+				),
+			},
+		},
+
+		// Mempool parameters
+		RelayNonStdTxs: false,
+
+		// Human-readable part for Bech32 encoded segwit addresses, as defined in
+		// BIP 173.
+		Bech32HRPSegwit: "tb", // always tb for test net
+
+		// Address encoding magics
+		PubKeyHashAddrID:        0x6f, // starts with m or n
+		ScriptHashAddrID:        0xc4, // starts with 2
+		WitnessPubKeyHashAddrID: 0x03, // starts with QW
+		WitnessScriptHashAddrID: 0x28, // starts with T7n
+		PrivateKeyID:            0xef, // starts with 9 (uncompressed) or c (compressed)
+
+		// BIP32 hierarchical deterministic extended key magics
+		HDPrivateKeyID: [4]byte{0x04, 0x35, 0x83, 0x94}, // starts with tprv
+		HDPublicKeyID:  [4]byte{0x04, 0x35, 0x87, 0xcf}, // starts with tpub
+
+		// BIP44 coin type used in the hierarchical deterministic path for
+		// address generation.
+		HDCoinType: 1,
+	}
+}
+
 var (
 	// ErrDuplicateNet describes an error where the parameters for a Bitcoin
 	// network could not be set due to the network already being a standard
@@ -588,6 +924,10 @@ var (
 	// is intended to identify the network for a hierarchical deterministic
 	// private extended key is not registered.
 	ErrUnknownHDKeyID = errors.New("unknown hd private extended key bytes")
+
+	// ErrInvalidHDKeyID describes an error where the provided hierarchical
+	// deterministic version bytes, or hd key id, is malformed.
+	ErrInvalidHDKeyID = errors.New("invalid hd extended key version bytes")
 )
 
 var (
@@ -619,7 +959,11 @@ func Register(params *Params) error {
 	registeredNets[params.Net] = struct{}{}
 	pubKeyHashAddrIDs[params.PubKeyHashAddrID] = struct{}{}
 	scriptHashAddrIDs[params.ScriptHashAddrID] = struct{}{}
-	hdPrivToPubKeyIDs[params.HDPrivateKeyID] = params.HDPublicKeyID[:]
+
+	err := RegisterHDKeyID(params.HDPublicKeyID[:], params.HDPrivateKeyID[:])
+	if err != nil {
+		return err
+	}
 
 	// A valid Bech32 encoded segwit address always has as prefix the
 	// human-readable part for the given net followed by '1'.
@@ -664,6 +1008,30 @@ func IsBech32SegwitPrefix(prefix string) bool {
 	prefix = strings.ToLower(prefix)
 	_, ok := bech32SegwitPrefixes[prefix]
 	return ok
+}
+
+// RegisterHDKeyID registers a public and private hierarchical deterministic
+// extended key ID pair.
+//
+// Non-standard HD version bytes, such as the ones documented in SLIP-0132,
+// should be registered using this method for library packages to lookup key
+// IDs (aka HD version bytes). When the provided key IDs are invalid, the
+// ErrInvalidHDKeyID error will be returned.
+//
+// Reference:
+//
+//	SLIP-0132 : Registered HD version bytes for BIP-0032
+//	https://github.com/satoshilabs/slips/blob/master/slip-0132.md
+func RegisterHDKeyID(hdPublicKeyID []byte, hdPrivateKeyID []byte) error {
+	if len(hdPublicKeyID) != 4 || len(hdPrivateKeyID) != 4 {
+		return ErrInvalidHDKeyID
+	}
+
+	var keyID [4]byte
+	copy(keyID[:], hdPrivateKeyID)
+	hdPrivToPubKeyIDs[keyID] = hdPublicKeyID
+
+	return nil
 }
 
 // HDPrivateKeyToPublicKeyID accepts a private hierarchical deterministic
