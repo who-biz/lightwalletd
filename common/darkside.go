@@ -14,7 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asherda/lightwalletd/parser"
+	"github.com/who-biz/lightwalletd/parser"
+	"github.com/who-biz/lightwalletd/walletrpc"
 )
 
 type darksideState struct {
@@ -184,6 +185,32 @@ func addBlockActive(blockBytes []byte) error {
 	if blockHeight < state.startHeight {
 		return errors.New(fmt.Sprint("adding block at height ", blockHeight,
 			" is lower than Sapling activation height ", state.startHeight))
+	}
+	// Determine the Sapling and Orchard commitment tree sizes for the new block.
+	countSaplingOutputs := func(block *parser.Block) uint32 {
+		var count = 0
+		for _, tx := range block.Transactions() {
+			count += tx.SaplingOutputsCount()
+		}
+		return uint32(count)
+	}
+	countOrchardActions := func(block *parser.Block) uint32 {
+		var count = 0
+		for _, tx := range block.Transactions() {
+			count += tx.OrchardActionsCount()
+		}
+		return uint32(count)
+	}
+	var prevSaplingTreeSize uint32
+	var prevOrchardTreeSize uint32
+	if blockHeight-state.startHeight > 0 {
+		// The new block connects to the previous one.
+		prevSaplingTreeSize = state.activeBlocks[blockHeight-state.startHeight-1].saplingTreeSize
+		prevOrchardTreeSize = state.activeBlocks[blockHeight-state.startHeight-1].orchardTreeSize
+	} else {
+		// This is the first block.
+		prevSaplingTreeSize = state.startSaplingTreeSize
+		prevOrchardTreeSize = state.startOrchardTreeSize
 	}
 	// Drop the block that will be overwritten, and its children, then add block.
 	state.activeBlocks = state.activeBlocks[:blockHeight-state.startHeight]

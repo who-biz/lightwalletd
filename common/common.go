@@ -7,13 +7,14 @@ package common
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/asherda/lightwalletd/parser"
-	"github.com/asherda/lightwalletd/walletrpc"
-	"github.com/pkg/errors"
+	"github.com/who-biz/lightwalletd/parser"
+	"github.com/who-biz/lightwalletd/walletrpc"
 	"github.com/sirupsen/logrus"
 )
 
@@ -214,15 +215,10 @@ type (
 func FirstRPC() {
 	retryCount := 0
 	for {
-		result, rpcErr := RawRequest("getblockchaininfo", []json.RawMessage{})
-		if rpcErr == nil {
+		_, err := GetBlockChainInfo()
+		if err == nil {
 			if retryCount > 0 {
 				Log.Warn("getblockchaininfo RPC successful")
-			}
-			var getblockchaininfo ZcashdRpcReplyGetblockchaininfo
-			err := json.Unmarshal(result, &getblockchaininfo)
-			if err != nil {
-				Log.Fatalf("error parsing JSON getblockchaininfo response: %v", err)
 			}
 			break
 		}
@@ -233,11 +229,24 @@ func FirstRPC() {
 			}).Fatal("unable to issue getblockchaininfo RPC call to zcashd node")
 		}
 		Log.WithFields(logrus.Fields{
-			"error": rpcErr.Error(),
+			"error": err.Error(),
 			"retry": retryCount,
 		}).Warn("error with getblockchaininfo rpc, retrying...")
 		Time.Sleep(time.Duration(10+retryCount*5) * time.Second) // backoff
 	}
+}
+
+func GetBlockChainInfo() (*ZcashdRpcReplyGetblockchaininfo, error) {
+	result, rpcErr := RawRequest("getblockchaininfo", []json.RawMessage{})
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	var getblockchaininfoReply ZcashdRpcReplyGetblockchaininfo
+	err := json.Unmarshal(result, &getblockchaininfoReply)
+	if err != nil {
+		return nil, err
+	}
+	return &getblockchaininfoReply, nil
 }
 
 func GetLightdInfo() (*walletrpc.LightdInfo, error) {
@@ -469,9 +478,12 @@ func BlockIngestor(c *BlockCache, rep int) {
 // nil if no block exists at this height.
 func GetBlock(cache *BlockCache, height int) (*walletrpc.CompactBlock, error) {
 	// First, check the cache to see if we have the block
-	block := cache.Get(height)
-	if block != nil {
-		return block, nil
+	var block *walletrpc.CompactBlock
+	if cache != nil {
+		block := cache.Get(height)
+		if block != nil {
+			return block, nil
+		}
 	}
 
 	// Not in the cache, ask zcashd
