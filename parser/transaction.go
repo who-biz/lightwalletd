@@ -347,6 +347,10 @@ type Transaction struct {
 	cachedTxID []byte // cached for performance
 }
 
+func (tx *Transaction) SetTxID(txid []byte) {
+	tx.txID = txid
+}
+
 // GetDisplayHash returns the transaction hash in big-endian display order.
 func (tx *Transaction) GetDisplayHash() []byte {
 	if tx.cachedTxID != nil {
