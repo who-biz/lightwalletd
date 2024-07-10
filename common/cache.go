@@ -63,6 +63,13 @@ func (c *BlockCache) HashMismatch(prevhash []byte) bool {
 	return c.latestHash != nil && !bytes.Equal(c.latestHash, prevhash)
 }
 
+// HashMatch indicates if the given prev-hash matches the most recent block's hash
+// so reorgs can be detected.
+func (c *BlockCache) HashMatch(prevhash []byte) bool {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	return c.latestHash == nil || bytes.Equal(c.latestHash, prevhash)
+}
 // Make the block at the given height the lowest height that we don't have.
 // In other words, wipe out this height and beyond.
 // This should never increase the size of the cache, only decrease.
