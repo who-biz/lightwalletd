@@ -224,7 +224,8 @@ func GetLightdInfo() (*walletrpc.LightdInfo, error) {
 	}, nil
 }
 
-func getBlockFromRPC(height int) (*walletrpc.CompactBlock, error) {
+//func getBlockFromRPC(height int) (*walletrpc.CompactBlock, error) {
+func getBlockFromRPC(height int, cache *BlockCache) (*walletrpc.CompactBlock, error)
 	params := make([]json.RawMessage, 2)
 	heightJSON, err := json.Marshal(strconv.Itoa(height))
 	if err != nil {
@@ -267,7 +268,13 @@ func getBlockFromRPC(height int) (*walletrpc.CompactBlock, error) {
 		return nil, errors.New("received unexpected height block")
 	}
 
-	return block.ToCompact(), nil
+	treeSize := uint64(0)
+	if cache != nil {
+		treeSize = cache.getSaplingTreeSize(height)
+	}
+
+	return block.ToCompactWithTreeSize(treeSize), nil
+//	return block.ToCompact(), nil
 }
 
 var (
@@ -333,7 +340,8 @@ func BlockIngestor(c *BlockCache, rep int) {
 			continue
 		}
 		var block *walletrpc.CompactBlock
-		block, err = getBlockFromRPC(height)
+		block, err = getBlockFromRPC(height, c)
+		//block, err = getBlockFromRPC(height)
 		if err != nil {
 			Log.Fatal("getblock ", height, " failed, will retry: ", err)
 		}
@@ -371,7 +379,8 @@ func GetBlock(cache *BlockCache, height int) (*walletrpc.CompactBlock, error) {
 	}
 
 	// Not in the cache, ask zcashd
-	block, err := getBlockFromRPC(height)
+	block, err := getBlockFromRPC(height, cache)
+	//block, err := getBlockFromRPC(height)
 	if err != nil {
 		return nil, err
 	}

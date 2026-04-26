@@ -307,6 +307,12 @@ func (tx *Transaction) HasSaplingElements() bool {
 	return tx.version >= 4 && (len(tx.shieldedSpends)+len(tx.shieldedOutputs)) > 0
 }
 
+// SaplingOutputCount returns the number of Sapling outputs in this transaction.
+// This corresponds to the number of new commitments added to the Sapling tree.
+func (tx *Transaction) SaplingOutputCount() int {
+	return len(tx.shieldedOutputs)
+}
+
 // ToCompact converts the given (full) transaction to compact format.
 func (tx *Transaction) ToCompact(index int) *walletrpc.CompactTx {
 	ctx := &walletrpc.CompactTx{

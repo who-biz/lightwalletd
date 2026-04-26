@@ -69,6 +69,15 @@ func (b *Block) HasSaplingTransactions() bool {
 	return false
 }
 
+// SaplingOutputCount returns total Sapling outputs (commitments) in this block.
+func (b *Block) SaplingOutputCount() int {
+	total := 0
+	for _, tx := range b.vtx {
+		total += tx.SaplingOutputCount()
+	}
+	return total
+}
+
 // see https://github.com/asherda/lightwalletd/issues/17#issuecomment-467110828
 const genesisTargetDifficulty = 520617983
 
@@ -116,6 +125,29 @@ func (b *Block) ToCompact() *walletrpc.CompactBlock {
 	}
 
 	// Only Sapling transactions have a meaningful compact encoding
+	saplingTxns := make([]*walletrpc.CompactTx, 0, len(b.vtx))
+	for idx, tx := range b.vtx {
+		if tx.HasSaplingElements() {
+			saplingTxns = append(saplingTxns, tx.ToCompact(idx))
+		}
+	}
+	compactBlock.Vtx = saplingTxns
+	return compactBlock
+}
+
+// ToCompactWithTreeSize returns the compact representation of the full block,
+// including a cumulative Sapling commitment tree size.
+func (b *Block) ToCompactWithTreeSize(treeSize uint64) *walletrpc.CompactBlock {
+	compactBlock := &walletrpc.CompactBlock{
+		//TODO ProtoVersion: 1,
+		Height:   uint64(b.GetHeight()),
+		PrevHash: b.hdr.HashPrevBlock,
+		Hash:     b.GetEncodableHash(),
+		Time:     b.hdr.Time,
+
+		SaplingCommitmentTreeSize: treeSize,
+	}
+
 	saplingTxns := make([]*walletrpc.CompactTx, 0, len(b.vtx))
 	for idx, tx := range b.vtx {
 		if tx.HasSaplingElements() {
